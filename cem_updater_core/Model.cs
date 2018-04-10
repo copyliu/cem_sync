@@ -25,7 +25,7 @@ namespace cem_updater_core
         public int interval;
     }
 
-    public class Crest
+    public class CrestOrder
     {
         public bool buy;
         public DateTime issued;

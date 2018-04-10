@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
@@ -22,9 +23,6 @@ namespace cem_updater_core
         private static System.Threading.ManualResetEvent _event1 = new ManualResetEvent(true);
         private static System.Threading.ManualResetEvent _event2 = new ManualResetEvent(true);
         private static WaitHandle[] events = {_event1, _event2};
-
-        private static string connectionstring_cn;
-        private static string connectionstring_tq;
 
         public static IConfiguration Configuration { get; set; }
 
@@ -50,8 +48,8 @@ namespace cem_updater_core
                 .AddJsonFile("appsettings.json");
             Configuration = builder.Build();
 
-            connectionstring_cn = Configuration["cndb"];
-            connectionstring_tq = Configuration["tqdb"];
+            DAL.connectionstring_cn = Configuration["cndb"];
+            DAL.connectionstring_tq = Configuration["tqdb"];
 
 
 
@@ -128,121 +126,84 @@ namespace cem_updater_core
 
         private static void SyncCN()
         {
-            List<int> regions = new List<int>();
-            using (var conn = new NpgsqlConnection(connectionstring_cn))
+            var regions = DAL.GetRegions();
+            var stations = DAL.GetStations();
+            using (var conn = new NpgsqlConnection(DAL.connectionstring_cn))
             {
                 conn.Open();
 
-                using (var cmd = new NpgsqlCommand())
-                {
-                    cmd.Connection = conn;
-                    cmd.CommandText = "select regionid FROM regions;";
-                    using (var reader = cmd.ExecuteReader())
 
-                    {
-                        while (reader.Read())
-                        {
-                            regions.Add(reader.GetInt32(0));
-                        }
-                    }
-
-                }
-
-                List<CurrentMarket> oldlist = new List<CurrentMarket>();
                 foreach (var region in regions)
                 {
-                    using (var cmd = new NpgsqlCommand())
-                    {
-                        cmd.Connection = conn;
-                        cmd.CommandText = "select * from current_market where regionid=@region;";
-                        cmd.Parameters.AddWithValue("region", region);
-                        using (var reader = cmd.ExecuteReader())
-                        {
-                            while (reader.Read())
-                            {
-                                oldlist.Add(new CurrentMarket()
-                                {
-                                    id = (long) reader["id"],
-                                    regionid = (long) reader["regionid"],
-                                    systemid = (long) reader["systemid"],
-                                    stationid = (long) reader["stationid"],
-                                    typeid = (int) reader["typeid"],
-                                    bid = (int) reader["bid"],
-                                    price = (double) reader["price"],
-                                    orderid = (long) reader["orderid"],
-                                    minvolume = (int) reader["minvolume"],
-                                    volremain = (int) reader["volremain"],
-                                    volenter = (int) reader["volenter"],
-                                    issued = (DateTime) reader["issued"],
-                                    range = (int) reader["range"],
-                                    reportedby = (long) reader["reportedby"],
-                                    reportedtime = (DateTime) reader["reportedtime"],
-                                    source = (int) reader["source"],
-                                    interval = (int) reader["interval"],
-
-                                });
-
-                            }
-                        }
-
-                    }
-
-                    var grouped_oldlist = oldlist.AsParallel().GroupBy(p => p.typeid)
-                        .ToDictionary(markets => markets.Key, markets => markets.ToList());
+                    var oldorders = DAL.GetCurrentMarkets(region);
+                    var oldlist = oldorders.AsParallel().GroupBy(p=>p.orderid).ToDictionary(g=>g.Key,g=>g.First());
+                    var oldorderids = oldorders.Select(p => p.orderid).ToHashSet();
+                  
                     string url = $"https://api-serenity.eve-online.com.cn/market/{region}/orders/all/";
-                    MyWebClient client =new MyWebClient();
+                    MyWebClient client = new MyWebClient();
                     Log(url);
-                    var res=client.DownloadString(url);
-                    List<Crest> orders =new List<Crest>();
+                    var res = client.DownloadString(url);
+                    List<CrestOrder> orders = new List<CrestOrder>();
                     var tmp = JObject.Parse(res);
 
-                    List<Crest> re = JsonConvert.DeserializeObject<List<Crest>>(tmp["items"].ToString());
+                    List<CrestOrder> re = JsonConvert.DeserializeObject<List<CrestOrder>>(tmp["items"].ToString());
                     orders.AddRange(re);
                     while (tmp.ContainsKey("next"))
                     {
                         Log(tmp["next"]["href"].ToString());
-                        res =client.DownloadString(tmp["next"]["href"].ToString());
+                        res = client.DownloadString(tmp["next"]["href"].ToString());
                         tmp = JObject.Parse(res);
-                        re = JsonConvert.DeserializeObject<List<Crest>>(tmp["items"].ToString());
+                        re = JsonConvert.DeserializeObject<List<CrestOrder>>(tmp["items"].ToString());
                         orders.AddRange(re);
                     }
-
-                    Parallel.ForEach(orders.GroupBy(p => p.type),new ParallelOptions(){MaxDegreeOfParallelism = 10}, c =>
+                    List<CrestOrder> newlist = new List<CrestOrder>();
+                    List<CrestOrder> updatelist = new List<CrestOrder>();
+                    
+                    
+                    foreach (var crest in orders)
                     {
-                        List<CurrentMarket> newlist=new List<CurrentMarket>();
-                        List<CurrentMarket> updatelist=new List<CurrentMarket>();
-                        List<long> deletelist=new List<long>();
-                        if (grouped_oldlist.ContainsKey(c.Key))
+//                        new CurrentMarket()
+//                        {
+//                            id = 0,
+//                            regionid = region,
+//                            systemid = stations[crest.stationID],
+//                            stationid = crest.stationID,
+//                            typeid = crest.type,
+//                            bid = crest.buy ? 1 : 0,
+//                            price = crest.price,
+//                            orderid = crest.id,
+//                            minvolume = crest.minVolume,
+//                            volremain = crest.volume,
+//                            volenter = crest.volumeEntered,
+//                            issued = crest.issued,
+//                            range = Helpers.ConvertRange(crest.range),
+//                            reportedby = 1,
+//                            reportedtime = DateTime.Now,
+//                            source = 0,
+//                            interval = crest.duration,
+//                        }
+                        if (oldorderids.Contains(crest.id))
                         {
+                            //TODO 判斷下訂單狀態是否變動過
+
+                            updatelist.Add(crest);
+                            oldorderids.Remove(crest.id);
 
                         }
                         else
                         {
-                            foreach (var crest in c)
-                            {
-                                newlist.Add(new CurrentMarket()
-                                {id=0,
-                                    regionid = region,
-                                    systemid = crest.,
-                                    stationid = ,
-                                    typeid = ,
-                                    bid = ,
-                                    price = ,
-                                    orderid = ,
-                                    minvolume = ,
-                                    volremain = ,
-                                    volenter = ,
-                                    issued = ,
-                                    range = ,
-                                    reportedby = ,
-                                    reportedtime = ,
-                                    source = ,
-                                    interval = ,
-                                });
-                            }
+                            newlist.Add(crest);
                         }
-                    });
-                   
+                        
+                    }
+
+                    var deletelist = oldorderids.ToList();
+                    DAL.UpdateDatabase(newlist, updatelist, deletelist);
+                           
+                            
+                           
+                      
+
 
 
 
