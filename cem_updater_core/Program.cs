@@ -6,6 +6,7 @@ using System.Net;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -135,8 +136,8 @@ namespace cem_updater_core
 
                 foreach (var region in regions)
                 {
-                    var oldorders = DAL.GetCurrentMarkets(region);
-                    var oldlist = oldorders.AsParallel().GroupBy(p=>p.orderid).ToDictionary(g=>g.Key,g=>g.First());
+                    var oldorders = DAL.GetCurrentMarkets(region).AsParallel();
+                    var oldlist = oldorders.GroupBy(p=>p.orderid).ToDictionary(g=>g.Key,g=>g.First());
                     var oldorderids = oldorders.Select(p => p.orderid).ToHashSet();
                   
                     string url = $"https://api-serenity.eve-online.com.cn/market/{region}/orders/all/";
@@ -158,46 +159,37 @@ namespace cem_updater_core
                     }
                     List<CrestOrder> newlist = new List<CrestOrder>();
                     List<CrestOrder> updatelist = new List<CrestOrder>();
-                    
+                    HashSet<int> updatedtypes=new HashSet<int>();
                     
                     foreach (var crest in orders)
                     {
-//                        new CurrentMarket()
-//                        {
-//                            id = 0,
-//                            regionid = region,
-//                            systemid = stations[crest.stationID],
-//                            stationid = crest.stationID,
-//                            typeid = crest.type,
-//                            bid = crest.buy ? 1 : 0,
-//                            price = crest.price,
-//                            orderid = crest.id,
-//                            minvolume = crest.minVolume,
-//                            volremain = crest.volume,
-//                            volenter = crest.volumeEntered,
-//                            issued = crest.issued,
-//                            range = Helpers.ConvertRange(crest.range),
-//                            reportedby = 1,
-//                            reportedtime = DateTime.Now,
-//                            source = 0,
-//                            interval = crest.duration,
-//                        }
+
                         if (oldorderids.Contains(crest.id))
                         {
-                            //TODO 判斷下訂單狀態是否變動過
-
-                            updatelist.Add(crest);
+                            
+                            if (crest != oldlist[crest.id])
+                            {
+                                updatelist.Add(crest);
+                                updatedtypes.Add(crest.type);
+                            }
+                            
                             oldorderids.Remove(crest.id);
 
                         }
                         else
                         {
                             newlist.Add(crest);
+                            updatedtypes.Add(crest.type);
                         }
                         
                     }
 
                     var deletelist = oldorderids.ToList();
+                    foreach (var oldorder in oldorders.Where(p=> oldorderids.Contains(p.orderid)).Select(p=>p.typeid).Distinct())
+                    {
+                        updatedtypes.Add(oldorder);
+                    }
+                    
                     DAL.UpdateDatabase(newlist, updatelist, deletelist);
                            
                             

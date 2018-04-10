@@ -120,8 +120,29 @@ namespace cem_updater_core
 
         public static void UpdateDatabase(List<CrestOrder> newlist, List<CrestOrder> updatelist, List<long> deletelist,bool tq=false)
         {
+//                        new CurrentMarket()
+//                        {
+//                            id = 0,
+//                            regionid = region,
+//                            systemid = stations[crest.stationID],
+//                            stationid = crest.stationID,
+//                            typeid = crest.type,
+//                            bid = crest.buy ? 1 : 0,
+//                            price = crest.price,
+//                            orderid = crest.id,
+//                            minvolume = crest.minVolume,
+//                            volremain = crest.volume,
+//                            volenter = crest.volumeEntered,
+//                            issued = crest.issued,
+//                            range = Helpers.ConvertRange(crest.range),
+//                            reportedby = 1,
+//                            reportedtime = DateTime.Now,
+//                            source = 0,
+//                            interval = crest.duration,
+//                        }
             using (var conn = new NpgsqlConnection(GetConnString(tq)))
             {
+                
             }
 
         }
