@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
 using Npgsql;
 
 namespace cem_updater_core
@@ -69,24 +70,28 @@ namespace cem_updater_core
             return result;
 
         }
-        public static Dictionary<long, long> GetStations(bool tq=false)
+        public static Dictionary<long, long>[] GetStations(bool tq=false)
         {
-            var result=new Dictionary<long, long>();
+            var system=new Dictionary<long, long>();
+            var region = new Dictionary<long, long>();
             using (var conn = new NpgsqlConnection(GetConnString(tq)))
             {
                 using (var cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "select stationid,systemid from stations ;";
+                    cmd.CommandText = "select stationid,a.systemid,b.regionid from stations a inner join systems b on a.systemid=b.systemid ;";
                     using (var reader = cmd.ExecuteReader())
                     {
                         while (reader.Read())
-                        { result.Add(reader.GetInt64(0),reader.GetInt64(1));}
+                        {
+                            system.Add(reader.GetInt64(0),reader.GetInt64(1));
+                            region.Add(reader.GetInt64(0),reader.GetInt64(2));
+                        }
                     }
                 }
             }
 
-            return result;
+            return new []{system,region};
 
         }
 
@@ -140,10 +145,35 @@ namespace cem_updater_core
 //                            source = 0,
 //                            interval = crest.duration,
 //                        }
-            using (var conn = new NpgsqlConnection(GetConnString(tq)))
+            Parallel.ForEach(newlist, new ParallelOptions() {MaxDegreeOfParallelism = 10}, (model) =>
             {
-                
-            }
+                using (var conn = new NpgsqlConnection(GetConnString(tq)))
+                {
+
+                    var cmd = new NpgsqlCommand();
+                    cmd.Connection = conn;
+                    cmd.CommandText =
+                        @"insert into current_market  (regionid,systemid,stationid,typeid,bid,price,orderid,minvolume,volremain,volenter,issued,interval,range,reportedby,reportedtime,source) 
+                                    VALUES (@regionid,@systemid,@stationid,@typeid,@bid,@price,@orderid,@minvolume,@volremain,@volenter,@issued,@interval,@range,@reportedby,@reportedtime,@source)";
+                    cmd.Parameters.Add(new NpgsqlParameter<long>("regionid", Caches.StationRegionDictCn[model.stationID]));
+                    cmd.Parameters.Add(new NpgsqlParameter<long>("systemid", Caches.StationSystemDictCn[model.stationID]));
+                    cmd.Parameters.Add(new NpgsqlParameter<long>("stationid", model.stationID));
+                    cmd.Parameters.Add(new NpgsqlParameter<long>("typeid", model.type));
+                    cmd.Parameters.Add(new NpgsqlParameter<long>("bid", model.buy ? 1 : 0));
+                    cmd.Parameters.Add(new NpgsqlParameter<double>("price", model.price));
+                    cmd.Parameters.Add(new NpgsqlParameter<long>("orderid", model.id));
+                    cmd.Parameters.Add(new NpgsqlParameter<int>("minvolume", model.minVolume));
+                    cmd.Parameters.Add(new NpgsqlParameter<int>("volremain", model.volume));
+                    cmd.Parameters.Add(new NpgsqlParameter<int>("volenter", model.volumeEntered));
+                    cmd.Parameters.Add(new NpgsqlParameter<DateTime>("issued", model.issued));
+                    cmd.Parameters.Add(new NpgsqlParameter<long>("interval", Helpers.ConvertRange(model.range)));
+                    cmd.Parameters.Add(new NpgsqlParameter<int>("range", 1));
+                    cmd.Parameters.Add(new NpgsqlParameter<int>("reportedby", 0));
+                    cmd.Parameters.Add(new NpgsqlParameter<DateTime>("reportedtime", DateTime.Now));
+                    cmd.Parameters.Add(new NpgsqlParameter<int>("source", model.duration));
+                }
+            });
+            
 
         }
     }

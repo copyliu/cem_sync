@@ -42,9 +42,9 @@ namespace cem_updater_core
 
         public static bool operator ==(CrestOrder order, CurrentMarket model)
         {
-            if (order == null && model == null) return true;
-            if (order == null || model == null) return false;
-            
+            if (ReferenceEquals(order, null) && ReferenceEquals(model, null)) return true;
+            if (ReferenceEquals(order, null) || ReferenceEquals(model, null)) return false;
+
             if (order.id != model.orderid) return false;
             if (order.stationID != model.stationid) return false;
             if (order.type != model.typeid) return false;
@@ -63,5 +63,7 @@ namespace cem_updater_core
         {
             return !(order == model);
         }
+
+       
     }
 }

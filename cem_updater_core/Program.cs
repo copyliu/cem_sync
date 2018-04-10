@@ -128,7 +128,7 @@ namespace cem_updater_core
         private static void SyncCN()
         {
             var regions = DAL.GetRegions();
-            var stations = DAL.GetStations();
+            
             using (var conn = new NpgsqlConnection(DAL.connectionstring_cn))
             {
                 conn.Open();
