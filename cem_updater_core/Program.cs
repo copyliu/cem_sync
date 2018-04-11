@@ -159,8 +159,7 @@ namespace cem_updater_core
                     }
                     List<CrestOrder> newlist = new List<CrestOrder>();
                     List<CrestOrder> updatelist = new List<CrestOrder>();
-                    HashSet<int> updatedtypes=new HashSet<int>();
-                    
+                    Dictionary<long,HashSet<int>> updatedtypes =new Dictionary<long, HashSet<int>>();
                     foreach (var crest in orders)
                     {
 
@@ -170,7 +169,11 @@ namespace cem_updater_core
                             if (crest != oldlist[crest.id])
                             {
                                 updatelist.Add(crest);
-                                updatedtypes.Add(crest.type);
+                                if (!updatedtypes.ContainsKey(Caches.StationRegionDictCn[crest.stationID]))
+                                {
+                                    updatedtypes.Add(Caches.StationRegionDictCn[crest.stationID],new HashSet<int>());
+                                }
+                                updatedtypes[Caches.StationRegionDictCn[crest.stationID]].Add(crest.type);
                             }
                             
                             oldorderids.Remove(crest.id);
@@ -179,18 +182,31 @@ namespace cem_updater_core
                         else
                         {
                             newlist.Add(crest);
-                            updatedtypes.Add(crest.type);
+                            if (!updatedtypes.ContainsKey(Caches.StationRegionDictCn[crest.stationID]))
+                            {
+                                updatedtypes.Add(Caches.StationRegionDictCn[crest.stationID], new HashSet<int>());
+                            }
+                            updatedtypes[Caches.StationRegionDictCn[crest.stationID]].Add(crest.type);
                         }
                         
                     }
 
                     var deletelist = oldorderids.ToList();
-                    foreach (var oldorder in oldorders.Where(p=> oldorderids.Contains(p.orderid)).Select(p=>p.typeid).Distinct())
+                    foreach (var oldorder in oldorders.Where(p=> oldorderids.Contains(p.orderid)).GroupBy(p=>p.regionid).Select(p=>
+                        new {regionid=p.Key,types=p.Select(o=>o.typeid).Distinct().ToList()}).Distinct())
                     {
-                        updatedtypes.Add(oldorder);
+                        if (!updatedtypes.ContainsKey(oldorder.regionid))
+                        {
+                            updatedtypes.Add(oldorder.regionid, new HashSet<int>());
+                        }
+
+                        foreach (var typeid in oldorder.types)
+                        {
+                            updatedtypes[oldorder.regionid].Add(typeid);
+                        }
                     }
                     
-                    DAL.UpdateDatabase(newlist, updatelist, deletelist);
+                    DAL.UpdateDatabase(newlist, updatelist, deletelist,updatedtypes);
                            
                             
                            
