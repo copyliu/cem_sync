@@ -11,6 +11,7 @@ using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Npgsql;
+using Npgsql.Logging;
 
 namespace cem_updater_core
 {
@@ -44,6 +45,7 @@ namespace cem_updater_core
 
         static void Main(string[] args)
         {
+//            NpgsqlLogManager.Provider = new ConsoleLoggingProvider(NpgsqlLogLevel.Debug);
             var builder = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile("appsettings.json");
@@ -129,10 +131,7 @@ namespace cem_updater_core
         {
             var regions = DAL.GetRegions();
             
-            using (var conn = new NpgsqlConnection(DAL.connectionstring_cn))
-            {
-                conn.Open();
-
+        
 
                 foreach (var region in regions)
                 {
@@ -162,8 +161,11 @@ namespace cem_updater_core
                     Dictionary<long,HashSet<int>> updatedtypes =new Dictionary<long, HashSet<int>>();
                     foreach (var crest in orders)
                     {
-
-                        if (oldorderids.Contains(crest.id))
+                        if (!Caches.StationRegionDictCn.ContainsKey(crest.stationID))
+                        {
+                            continue;//TODO:此空间站是空堡, 暂不收录
+                        }
+                    if (oldorderids.Contains(crest.id))
                         {
                             
                             if (crest != oldlist[crest.id])
@@ -182,6 +184,7 @@ namespace cem_updater_core
                         else
                         {
                             newlist.Add(crest);
+                           
                             if (!updatedtypes.ContainsKey(Caches.StationRegionDictCn[crest.stationID]))
                             {
                                 updatedtypes.Add(Caches.StationRegionDictCn[crest.stationID], new HashSet<int>());
@@ -216,7 +219,7 @@ namespace cem_updater_core
 
 
                 }
-            }
+            
         }
     }
 }

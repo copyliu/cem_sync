@@ -21,7 +21,7 @@ namespace cem_updater_core
     }
     public class DAL
     {
-        private  static string GetConnString(bool tq = false)
+        public  static string GetConnString(bool tq = false)
         {
             return tq ? connectionstring_tq : connectionstring_cn;
         }
@@ -30,6 +30,7 @@ namespace cem_updater_core
             var result = new List<CurrentMarket>();
             using (var conn = new NpgsqlConnection(GetConnString(tq)))
             {
+                conn.Open();
                 using (var cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
@@ -76,6 +77,7 @@ namespace cem_updater_core
             var region = new Dictionary<long, long>();
             using (var conn = new NpgsqlConnection(GetConnString(tq)))
             {
+                conn.Open();
                 using (var cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
@@ -129,7 +131,7 @@ namespace cem_updater_core
             {
                 using (var conn = new NpgsqlConnection(GetConnString(tq)))
                 {
-
+                    conn.Open();
                     var cmd = new NpgsqlCommand();
                     cmd.Connection = conn;
                     cmd.CommandText =
@@ -158,7 +160,7 @@ namespace cem_updater_core
             {
                 using (var conn = new NpgsqlConnection(GetConnString(tq)))
                 {
-
+                    conn.Open();
                     var cmd = new NpgsqlCommand();
                     cmd.Connection = conn;
                     cmd.CommandText =
@@ -205,7 +207,7 @@ namespace cem_updater_core
             });
             using (var conn = new NpgsqlConnection(GetConnString(tq)))
             {
-
+                conn.Open();
                 var cmd = new NpgsqlCommand();
                 cmd.Connection = conn;
                 cmd.CommandText =@"delete from current_market  where orderid= any (@orderid);";
@@ -220,7 +222,7 @@ namespace cem_updater_core
 
                     using (var conn = new NpgsqlConnection(GetConnString(tq)))
                     {
-
+                        conn.Open();
                         var cmd = new NpgsqlCommand();
                         cmd.Connection = conn;
                         cmd.CommandText = @"select max(price),sum(volremain) from current_market where typeid=@typeid and regionid=@regionid and bid=1;
@@ -236,15 +238,15 @@ namespace cem_updater_core
                            
                             while (reader.Read())
                             {
-                                buyprice = reader.GetDouble(0);
-                                buyvol = reader.GetInt64(1);
+                                buyprice  = reader.IsDBNull(0)? 0:reader.GetDouble(0);
+                                buyvol = reader.IsDBNull(1) ? 0 : reader.GetInt64(1);
                             }
 
                             reader.NextResult();
                             while (reader.Read())
                             {
-                                sellprice = reader.GetDouble(0);
-                                sellvol = reader.GetInt64(1);
+                                sellprice = reader.IsDBNull(0) ? 0 : reader.GetDouble(0);
+                                sellvol = reader.IsDBNull(1) ? 0 : reader.GetInt64(1);
                             }
                         }
                         cmd=new NpgsqlCommand();
@@ -285,13 +287,13 @@ namespace cem_updater_core
                         if (hasoldrecord)
                         {
                             cmd.CommandText =
-                                "update market_markethistorybyday set min=LEAST(min,@cur),max=GREATEST(max,@cur),end=@cur where date=@date and regionid=@regionid and typeid=@typeid;";
+                                "update market_markethistorybyday set min=LEAST(min,@cur),max=GREATEST(max,@cur),\"end\"=@cur where date=@date and regionid=@regionid and typeid=@typeid;";
                            
                         }
                         else
                         {
                             cmd.CommandText =
-                                @"INSERT INTO market_markethistorybyday( date, min, max, start, end, volume, regionid, typeid, order) " +
+                                "INSERT INTO market_markethistorybyday( date, min, max, start, \"end\", volume, regionid, typeid, \"order\") " +
                                 "VALUES ( @date, @cur, @cur, @cur, @cur, 0, @regionid, @typeid, 0);";
                            
                         }
