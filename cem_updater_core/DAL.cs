@@ -284,9 +284,22 @@ namespace cem_updater_core
                         cmd.Connection = conn;
                         if (hasoldrecord)
                         {
-                            cmd.CommandText= "update market_markethistorybyday set "
+                            cmd.CommandText =
+                                "update market_markethistorybyday set min=LEAST(min,@cur),max=GREATEST(max,@cur),end=@cur where date=@date and regionid=@regionid and typeid=@typeid;";
+                           
                         }
-                        
+                        else
+                        {
+                            cmd.CommandText =
+                                @"INSERT INTO market_markethistorybyday( date, min, max, start, end, volume, regionid, typeid, order) " +
+                                "VALUES ( @date, @cur, @cur, @cur, @cur, 0, @regionid, @typeid, 0);";
+                           
+                        }
+                        cmd.Parameters.AddWithValue("cur", sellprice);
+                        cmd.Parameters.AddWithValue("date", DateTime.Today);
+                        cmd.Parameters.AddWithValue("typeid", typeid);
+                        cmd.Parameters.AddWithValue("regionid", u.Key);
+                        cmd.ExecuteNonQuery();
 
 
 
