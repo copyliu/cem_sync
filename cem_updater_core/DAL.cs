@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Npgsql;
@@ -8,7 +9,7 @@ namespace cem_updater_core
 {
     public class Helpers
     {
-        public static int ConvertRange( string range)
+        public static int ConvertRange(string range)
         {
             switch (range)
             {
@@ -123,6 +124,42 @@ namespace cem_updater_core
             }
 
             return regions;
+        }
+
+        public static void UpdateDatabase(List<ESIMarketOrder> newlist, List<ESIMarketOrder> updatelist,
+            List<long> deletelist, Dictionary<long, HashSet<int>> updatedtypelist, bool tq = false)
+        {
+          
+            var cnewlist=newlist.AsParallel().Select(p => new CrestOrder()
+            {
+                stationID = p.location_id,
+                id = p.order_id,
+                type = p.type_id,
+                duration = p.duration,
+                minVolume = p.min_volume,
+                volume = p.volume_remain,
+                issued = p.issued,
+                volumeEntered = p.volume_total,
+                price = p.price,
+                buy = p.is_buy_order,
+                range = p.range
+            }).ToList();
+            var cupdatelist = updatelist.AsParallel().Select(p => new CrestOrder()
+            {
+                stationID = p.location_id,
+                id = p.order_id,
+                type = p.type_id,
+                duration = p.duration,
+                minVolume = p.min_volume,
+                volume = p.volume_remain,
+                issued = p.issued,
+                volumeEntered = p.volume_total,
+                price = p.price,
+                buy = p.is_buy_order,
+                range = p.range
+            }).ToList();
+            UpdateDatabase(cnewlist,cupdatelist,deletelist,updatedtypelist,tq);
+
         }
 
         public static void UpdateDatabase(List<CrestOrder> newlist, List<CrestOrder> updatelist, List<long> deletelist,Dictionary<long, HashSet<int>> updatedtypelist,bool tq=false)

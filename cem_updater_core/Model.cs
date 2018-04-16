@@ -8,18 +8,41 @@ namespace cem_updater_core
 
     public  class ESIMarketOrder
     {
-        private long order_id;
-        private int type_id;
-        private long location_id;
-        private int system_id;
-        private int volume_total;
-        private int volume_remain;
-        private int min_volume;
-        private double price;
-        private bool is_buy_order;
-        private int duration;
-        private System.DateTime issued;
-        private string range;
+        public long order_id;
+        public int type_id;
+        public long location_id;
+        public int system_id;
+        public int volume_total;
+        public int volume_remain;
+        public int min_volume;
+        public double price;
+        public bool is_buy_order;
+        public int duration;
+        public System.DateTime issued;
+        public string range;
+        public static bool operator ==(ESIMarketOrder order, CurrentMarket model)
+        {
+            if (ReferenceEquals(order, null) && ReferenceEquals(model, null)) return true;
+            if (ReferenceEquals(order, null) || ReferenceEquals(model, null)) return false;
+
+            if (order.order_id != model.orderid) return false;
+            if (order.location_id != model.stationid) return false;
+            if (order.type_id != model.typeid) return false;
+            if (order.is_buy_order != (model.bid == 1)) return false;
+            if (order.price != model.price) return false;
+            if (order.volume_remain != model.volremain) return false;
+            if (order.min_volume != model.minvolume) return false;
+            if (order.volume_total != model.volenter) return false;
+            if (order.issued != model.issued) return false;
+            if (order.duration != model.interval) return false;
+            if (Helpers.ConvertRange(order.range) != model.range) return false;
+            return true;
+        }
+
+        public static bool operator !=(ESIMarketOrder order, CurrentMarket model)
+        {
+            return !(order == model);
+        }
     }
 
 
@@ -69,6 +92,7 @@ namespace cem_updater_core
         public string range;
         public long stationID;
         public int type;
+      
 
         public static bool operator ==(CrestOrder order, CurrentMarket model)
         {
