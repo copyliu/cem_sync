@@ -59,7 +59,7 @@ namespace cem_updater_core
 
 
             bool keepRunning = true;
-//            _aTimer1.Start();
+            _aTimer1.Start();
             _aTimer2.Start();
             _aTimer1.Elapsed += (sender, ar) =>
             {
@@ -128,10 +128,20 @@ namespace cem_updater_core
             var regions = DAL.GetRegions(true);
             foreach (var region in regions)
             {
-                var oldorders = DAL.GetCurrentMarkets(region,true).AsParallel();
+                var oldorders = DAL.GetCurrentMarkets(region, true).AsParallel();
                 var oldlist = oldorders.GroupBy(p => p.orderid).ToDictionary(g => g.Key, g => g.First());
                 var oldorderids = oldorders.Select(p => p.orderid).ToHashSet();
-                var orders = GetESIOrders(region, true);
+                List<ESIMarketOrder> orders;
+                try
+                {
+                    orders = GetESIOrders(region, true);
+                }
+                catch (Exception e)
+                {
+                    Log(e.ToString());
+                    continue;
+                }
+
 
 
                 List<ESIMarketOrder> newlist = new List<ESIMarketOrder>();
@@ -141,8 +151,9 @@ namespace cem_updater_core
                 {
                     if (!Caches.StationRegionDictCn.ContainsKey(crest.location_id))
                     {
-                        continue;//TODO:此空间站是空堡, 暂不收录
+                        continue; //TODO:此空间站是空堡, 暂不收录
                     }
+
                     if (oldorderids.Contains(crest.order_id))
                     {
 
@@ -153,6 +164,7 @@ namespace cem_updater_core
                             {
                                 updatedtypes.Add(Caches.StationRegionDictCn[crest.location_id], new HashSet<int>());
                             }
+
                             updatedtypes[Caches.StationRegionDictCn[crest.location_id]].Add(crest.type_id);
                         }
 
@@ -167,14 +179,16 @@ namespace cem_updater_core
                         {
                             updatedtypes.Add(Caches.StationRegionDictCn[crest.location_id], new HashSet<int>());
                         }
+
                         updatedtypes[Caches.StationRegionDictCn[crest.location_id]].Add(crest.type_id);
                     }
 
                 }
 
                 var deletelist = oldorderids.ToList();
-                foreach (var oldorder in oldorders.Where(p => oldorderids.Contains(p.orderid)).GroupBy(p => p.regionid).Select(p =>
-                       new { regionid = p.Key, types = p.Select(o => o.typeid).Distinct().ToList() }).Distinct())
+                foreach (var oldorder in oldorders.Where(p => oldorderids.Contains(p.orderid)).GroupBy(p => p.regionid)
+                    .Select(p =>
+                        new {regionid = p.Key, types = p.Select(o => o.typeid).Distinct().ToList()}).Distinct())
                 {
                     if (!updatedtypes.ContainsKey(oldorder.regionid))
                     {
@@ -187,7 +201,7 @@ namespace cem_updater_core
                     }
                 }
 
-                DAL.UpdateDatabase(newlist, updatelist, deletelist, updatedtypes,true);
+                DAL.UpdateDatabase(newlist, updatelist, deletelist, updatedtypes, true);
 
 
 
@@ -196,7 +210,7 @@ namespace cem_updater_core
             }
         }
 
-        private static List<ESIMarketOrder> GetESIOrders(int regionid,bool tq=false)
+        private static List<ESIMarketOrder> GetESIOrders(int regionid, bool tq = false)
         {
             string url;
             if (tq)
@@ -207,9 +221,10 @@ namespace cem_updater_core
             {
                 throw new NotImplementedException("沒有國服");
             }
+
             Log(url);
             int pages;
-            List<ESIMarketOrder> results=new List<ESIMarketOrder>();
+            List<ESIMarketOrder> results = new List<ESIMarketOrder>();
             MyWebClient client = new MyWebClient();
             using (var s = client.OpenRead(url))
             {
@@ -217,6 +232,7 @@ namespace cem_updater_core
                 {
                     pages = 1;
                 }
+
                 using (StreamReader sr = new StreamReader(s))
                 {
                     using (JsonReader reader = new JsonTextReader(sr))
@@ -229,13 +245,14 @@ namespace cem_updater_core
                         }
                     }
                 }
+
                 if (pages > 1)
                 {
                     Parallel.ForEach(Enumerable.Range(2, pages - 2 + 1),
                         new ParallelOptions() {MaxDegreeOfParallelism = 10},
                         pagenum =>
                         {
-                            var result=GetESIOrders(url + $"&page={pagenum}");
+                            var result = GetESIOrders(url + $"&page={pagenum}");
                             if (result != null)
                             {
                                 lock (results)
@@ -245,7 +262,7 @@ namespace cem_updater_core
                             }
                         });
                 }
-                
+
             }
 
             return results;
@@ -274,19 +291,21 @@ namespace cem_updater_core
         private static void SyncCN()
         {
             var regions = DAL.GetRegions();
-            
-        
 
-                foreach (var region in regions)
+
+
+            foreach (var region in regions)
+            {
+                var oldorders = DAL.GetCurrentMarkets(region).AsParallel();
+                var oldlist = oldorders.GroupBy(p => p.orderid).ToDictionary(g => g.Key, g => g.First());
+                var oldorderids = oldorders.Select(p => p.orderid).ToHashSet();
+
+                string url = $"https://api-serenity.eve-online.com.cn/market/{region}/orders/all/";
+
+                CrestMarketResult crestresult = null;
+                List<CrestOrder> orders = new List<CrestOrder>();
+                try
                 {
-                    var oldorders = DAL.GetCurrentMarkets(region).AsParallel();
-                    var oldlist = oldorders.GroupBy(p=>p.orderid).ToDictionary(g=>g.Key,g=>g.First());
-                    var oldorderids = oldorders.Select(p => p.orderid).ToHashSet();
-                  
-                    string url = $"https://api-serenity.eve-online.com.cn/market/{region}/orders/all/";
-                   
-                    CrestMarketResult crestresult = null;
-                    List<CrestOrder> orders = new List<CrestOrder>();
                     crestresult = GetCrestMarketResult(url);
 
 
@@ -296,7 +315,7 @@ namespace cem_updater_core
                     }
 
 
-                    while (crestresult.next!=null)
+                    while (crestresult.next != null)
                     {
                         crestresult = GetCrestMarketResult(crestresult.next.href);
 
@@ -306,76 +325,87 @@ namespace cem_updater_core
                         }
 
                     }
-                    List<CrestOrder> newlist = new List<CrestOrder>();
-                    List<CrestOrder> updatelist = new List<CrestOrder>();
-                    Dictionary<long,HashSet<int>> updatedtypes =new Dictionary<long, HashSet<int>>();
-                    foreach (var crest in orders)
-                    {
-                        if (!Caches.StationRegionDictCn.ContainsKey(crest.stationID))
-                        {
-                            continue;//TODO:此空间站是空堡, 暂不收录
-                        }
-                    if (oldorderids.Contains(crest.id))
-                        {
-                            
-                            if (crest != oldlist[crest.id])
-                            {
-                                updatelist.Add(crest);
-                                if (!updatedtypes.ContainsKey(Caches.StationRegionDictCn[crest.stationID]))
-                                {
-                                    updatedtypes.Add(Caches.StationRegionDictCn[crest.stationID],new HashSet<int>());
-                                }
-                                updatedtypes[Caches.StationRegionDictCn[crest.stationID]].Add(crest.type);
-                            }
-                            
-                            oldorderids.Remove(crest.id);
+                }
+                catch (Exception e)
+                {
+                    Log(e.ToString());
+                    continue;
+                }
 
-                        }
-                        else
+                List<CrestOrder> newlist = new List<CrestOrder>();
+                List<CrestOrder> updatelist = new List<CrestOrder>();
+                Dictionary<long, HashSet<int>> updatedtypes = new Dictionary<long, HashSet<int>>();
+                foreach (var crest in orders)
+                {
+                    if (!Caches.StationRegionDictCn.ContainsKey(crest.stationID))
+                    {
+                        continue; //TODO:此空间站是空堡, 暂不收录
+                    }
+
+                    if (oldorderids.Contains(crest.id))
+                    {
+
+                        if (crest != oldlist[crest.id])
                         {
-                            newlist.Add(crest);
-                           
+                            updatelist.Add(crest);
                             if (!updatedtypes.ContainsKey(Caches.StationRegionDictCn[crest.stationID]))
                             {
                                 updatedtypes.Add(Caches.StationRegionDictCn[crest.stationID], new HashSet<int>());
                             }
+
                             updatedtypes[Caches.StationRegionDictCn[crest.stationID]].Add(crest.type);
                         }
-                        
-                    }
 
-                    var deletelist = oldorderids.ToList();
-                    foreach (var oldorder in oldorders.Where(p=> oldorderids.Contains(p.orderid)).GroupBy(p=>p.regionid).Select(p=>
-                        new {regionid=p.Key,types=p.Select(o=>o.typeid).Distinct().ToList()}).Distinct())
+                        oldorderids.Remove(crest.id);
+
+                    }
+                    else
                     {
-                        if (!updatedtypes.ContainsKey(oldorder.regionid))
+                        newlist.Add(crest);
+
+                        if (!updatedtypes.ContainsKey(Caches.StationRegionDictCn[crest.stationID]))
                         {
-                            updatedtypes.Add(oldorder.regionid, new HashSet<int>());
+                            updatedtypes.Add(Caches.StationRegionDictCn[crest.stationID], new HashSet<int>());
                         }
 
-                        foreach (var typeid in oldorder.types)
-                        {
-                            updatedtypes[oldorder.regionid].Add(typeid);
-                        }
+                        updatedtypes[Caches.StationRegionDictCn[crest.stationID]].Add(crest.type);
                     }
-                    
-                    DAL.UpdateDatabase(newlist, updatelist, deletelist,updatedtypes);
-                           
-                            
-                           
-                      
-
-
-
 
                 }
-            
+
+                var deletelist = oldorderids.ToList();
+                foreach (var oldorder in oldorders.Where(p => oldorderids.Contains(p.orderid)).GroupBy(p => p.regionid)
+                    .Select(p =>
+                        new {regionid = p.Key, types = p.Select(o => o.typeid).Distinct().ToList()}).Distinct())
+                {
+                    if (!updatedtypes.ContainsKey(oldorder.regionid))
+                    {
+                        updatedtypes.Add(oldorder.regionid, new HashSet<int>());
+                    }
+
+                    foreach (var typeid in oldorder.types)
+                    {
+                        updatedtypes[oldorder.regionid].Add(typeid);
+                    }
+                }
+
+                DAL.UpdateDatabase(newlist, updatelist, deletelist, updatedtypes);
+
+
+
+
+
+
+
+
+            }
+
         }
 
         private static CrestMarketResult GetCrestMarketResult(string url)
         {
             Log(url);
-            MyWebClient client=new MyWebClient();
+            MyWebClient client = new MyWebClient();
             CrestMarketResult crestresult;
             using (var s = client.OpenRead(url))
             {
@@ -392,6 +422,6 @@ namespace cem_updater_core
             return crestresult;
         }
 
-        
+
     }
 }
