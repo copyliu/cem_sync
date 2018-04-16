@@ -5,6 +5,36 @@ using System.Text;
 
 namespace cem_updater_core
 {
+
+    public  class ESIMarketOrder
+    {
+        private long order_id;
+        private int type_id;
+        private long location_id;
+        private int system_id;
+        private int volume_total;
+        private int volume_remain;
+        private int min_volume;
+        private double price;
+        private bool is_buy_order;
+        private int duration;
+        private System.DateTime issued;
+        private string range;
+    }
+
+
+    public class CrestMarketResult
+    {
+        public class Next
+        {
+            public string href;
+        }
+        public int totalCount;
+        public int pageCount;
+        public List<CrestOrder> items;
+        public Next next;
+    }
+
     public class CurrentMarket
     {
         public long id;

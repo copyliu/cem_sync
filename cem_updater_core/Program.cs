@@ -127,6 +127,8 @@ namespace cem_updater_core
 //            throw new NotImplementedException();
         }
 
+
+
         private static void SyncCN()
         {
             var regions = DAL.GetRegions();
@@ -140,21 +142,27 @@ namespace cem_updater_core
                     var oldorderids = oldorders.Select(p => p.orderid).ToHashSet();
                   
                     string url = $"https://api-serenity.eve-online.com.cn/market/{region}/orders/all/";
-                    MyWebClient client = new MyWebClient();
-                    Log(url);
-                    var res = client.DownloadString(url);
+                   
+                    CrestMarketResult crestresult = null;
                     List<CrestOrder> orders = new List<CrestOrder>();
-                    var tmp = JObject.Parse(res);
+                    crestresult = GetCrestMarketResult(url);
 
-                    List<CrestOrder> re = JsonConvert.DeserializeObject<List<CrestOrder>>(tmp["items"].ToString());
-                    orders.AddRange(re);
-                    while (tmp.ContainsKey("next"))
+
+                    if (crestresult.items != null)
                     {
-                        Log(tmp["next"]["href"].ToString());
-                        res = client.DownloadString(tmp["next"]["href"].ToString());
-                        tmp = JObject.Parse(res);
-                        re = JsonConvert.DeserializeObject<List<CrestOrder>>(tmp["items"].ToString());
-                        orders.AddRange(re);
+                        orders.AddRange(crestresult.items);
+                    }
+
+
+                    while (crestresult.next!=null)
+                    {
+                        crestresult = GetCrestMarketResult(crestresult.next.href);
+
+                        if (crestresult.items != null)
+                        {
+                            orders.AddRange(crestresult.items);
+                        }
+
                     }
                     List<CrestOrder> newlist = new List<CrestOrder>();
                     List<CrestOrder> updatelist = new List<CrestOrder>();
@@ -220,6 +228,26 @@ namespace cem_updater_core
 
                 }
             
+        }
+
+        private static CrestMarketResult GetCrestMarketResult(string url)
+        {
+            Log(url);
+            MyWebClient client=new MyWebClient();
+            CrestMarketResult crestresult;
+            using (var s = client.OpenRead(url))
+            {
+                using (StreamReader sr = new StreamReader(s))
+                {
+                    using (JsonReader reader = new JsonTextReader(sr))
+                    {
+                        JsonSerializer serializer = new JsonSerializer();
+                        crestresult = serializer.Deserialize<CrestMarketResult>(reader);
+                    }
+                }
+            }
+
+            return crestresult;
         }
     }
 }
