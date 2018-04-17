@@ -59,6 +59,7 @@ namespace cem_updater_core
 
 
             bool keepRunning = true;
+            isServiceRunning = true;
             _aTimer1.Start();
             _aTimer2.Start();
             _aTimer1.Elapsed += (sender, ar) =>
@@ -134,7 +135,7 @@ namespace cem_updater_core
                 List<ESIMarketOrder> orders;
                 try
                 {
-                    orders = GetESIOrders(region, true);
+                    orders = GetESIOrders(region, true).Distinct().ToList();
                 }
                 catch (Exception e)
                 {
@@ -147,6 +148,7 @@ namespace cem_updater_core
                 List<ESIMarketOrder> newlist = new List<ESIMarketOrder>();
                 List<ESIMarketOrder> updatelist = new List<ESIMarketOrder>();
                 Dictionary<long, HashSet<int>> updatedtypes = new Dictionary<long, HashSet<int>>();
+                
                 foreach (var crest in orders)
                 {
                     if (!Caches.StationRegionDictCn.ContainsKey(crest.location_id))
@@ -200,7 +202,7 @@ namespace cem_updater_core
                         updatedtypes[oldorder.regionid].Add(typeid);
                     }
                 }
-
+                Log($"new:{newlist.Count},update:{updatelist.Count},del:{deletelist.Count}");
                 DAL.UpdateDatabase(newlist, updatelist, deletelist, updatedtypes, true);
 
 
@@ -332,9 +334,14 @@ namespace cem_updater_core
                     continue;
                 }
 
+                foreach (var crestOrder in orders)
+                {
+                    crestOrder.issued = DateTime.SpecifyKind(crestOrder.issued, DateTimeKind.Utc);
+                }
                 List<CrestOrder> newlist = new List<CrestOrder>();
                 List<CrestOrder> updatelist = new List<CrestOrder>();
                 Dictionary<long, HashSet<int>> updatedtypes = new Dictionary<long, HashSet<int>>();
+                orders = orders.Distinct().ToList();
                 foreach (var crest in orders)
                 {
                     if (!Caches.StationRegionDictCn.ContainsKey(crest.stationID))
@@ -388,7 +395,7 @@ namespace cem_updater_core
                         updatedtypes[oldorder.regionid].Add(typeid);
                     }
                 }
-
+                Log($"new:{newlist.Count},update:{updatelist.Count},del:{deletelist.Count}");
                 DAL.UpdateDatabase(newlist, updatelist, deletelist, updatedtypes);
 
 
@@ -418,7 +425,7 @@ namespace cem_updater_core
                     }
                 }
             }
-
+            
             return crestresult;
         }
 
