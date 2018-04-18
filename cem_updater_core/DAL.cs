@@ -11,6 +11,10 @@ namespace cem_updater_core
     {
         public static int ConvertRange(string range)
         {
+            if (int.TryParse(range, out var r))
+            {
+                return r;
+            }
             switch (range)
             {
                 case "station": return 0;

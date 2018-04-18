@@ -156,6 +156,10 @@ namespace cem_updater_core
                         continue; //TODO:此空间站是空堡, 暂不收录
                     }
 
+                    if (Caches.StationRegionDictCn[crest.location_id] != region)
+                    {
+                        continue;
+                    }
                     if (oldorderids.Contains(crest.order_id))
                     {
 
@@ -334,10 +338,7 @@ namespace cem_updater_core
                     continue;
                 }
 
-                foreach (var crestOrder in orders)
-                {
-                    crestOrder.issued = DateTime.SpecifyKind(crestOrder.issued, DateTimeKind.Utc);
-                }
+               
                 List<CrestOrder> newlist = new List<CrestOrder>();
                 List<CrestOrder> updatelist = new List<CrestOrder>();
                 Dictionary<long, HashSet<int>> updatedtypes = new Dictionary<long, HashSet<int>>();
@@ -348,7 +349,11 @@ namespace cem_updater_core
                     {
                         continue; //TODO:此空间站是空堡, 暂不收录
                     }
-
+                    crest.issued = DateTime.SpecifyKind(crest.issued, DateTimeKind.Utc);
+                    if (Caches.StationRegionDictCn[crest.stationID] != region)
+                    {
+                        continue;
+                    }
                     if (oldorderids.Contains(crest.id))
                     {
 
