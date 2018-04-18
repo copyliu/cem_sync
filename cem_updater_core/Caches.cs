@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Net;
+using System.Net.Http;
 using System.Text;
 
 namespace cem_updater_core
@@ -47,6 +49,7 @@ namespace cem_updater_core
 
         private static Dictionary<long, long> _stationSystemDictTq;
         private static Dictionary<long, long> _stationRegionDictTq;
+        private static HttpClient _httpClient;
 
         public static Dictionary<long, long> StationSystemDictTq
         {
@@ -73,5 +76,7 @@ namespace cem_updater_core
 
         }
 
+
+        public static HttpClient httpClient => _httpClient ?? (_httpClient = new HttpClient(new HttpClientHandler(){AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate}));
     }
 }

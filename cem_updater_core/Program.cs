@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -231,13 +232,24 @@ namespace cem_updater_core
             Log(url);
             int pages;
             List<ESIMarketOrder> results = new List<ESIMarketOrder>();
-            MyWebClient client = new MyWebClient();
-            using (var s = client.OpenRead(url))
+            var httpResponse = Caches.httpClient.GetAsync(url).Result;
+            
+            if (!httpResponse.IsSuccessStatusCode)
             {
-                if (!int.TryParse(client.ResponseHeaders["x-pages"], out pages))
-                {
-                    pages = 1;
-                }
+                throw new HttpRequestException(httpResponse.StatusCode.ToString());
+            }
+
+
+            if (!httpResponse.Headers.TryGetValues("x-pages", out var xPages) ||
+                !int.TryParse(xPages.FirstOrDefault(), out pages))
+            {
+                pages = 1;
+            }
+          
+
+            using (var s = httpResponse.Content.ReadAsStreamAsync().Result)
+            {
+               
 
                 using (StreamReader sr = new StreamReader(s))
                 {
@@ -277,9 +289,9 @@ namespace cem_updater_core
         private static List<ESIMarketOrder> GetESIOrders(string url)
         {
             Log(url);
-            MyWebClient client = new MyWebClient();
+            
             List<ESIMarketOrder> crestresult;
-            using (var s = client.OpenRead(url))
+            using (var s = Caches.httpClient.GetStreamAsync(url).Result)
             {
                 using (StreamReader sr = new StreamReader(s))
                 {
@@ -417,9 +429,10 @@ namespace cem_updater_core
         private static CrestMarketResult GetCrestMarketResult(string url)
         {
             Log(url);
-            MyWebClient client = new MyWebClient();
+            
             CrestMarketResult crestresult;
-            using (var s = client.OpenRead(url))
+            
+            using (var s = Caches.httpClient.GetStreamAsync(url).Result)
             {
                 using (StreamReader sr = new StreamReader(s))
                 {
