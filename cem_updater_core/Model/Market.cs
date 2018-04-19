@@ -1,9 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel.Design;
-using System.Text;
+using cem_updater_core.DAL;
 
-namespace cem_updater_core
+namespace cem_updater_core.Model
 {
 
     public  class ESIMarketOrder

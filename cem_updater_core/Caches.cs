@@ -46,10 +46,10 @@ namespace cem_updater_core
             {
                 if (_lastCache < DateTime.Now - TimeSpan.FromHours(1))
                 {
-                    var v = DAL.GetStations();
+                    var v = DAL.Market.GetStations();
                     _stationSystemDictCn = v[0];
                     _stationRegionDictCn = v[1];
-                    var w = DAL.GetStations(true);
+                    var w = DAL.Market.GetStations(true);
                     _stationSystemDictTq = w[0];
                     _stationRegionDictTq = w[1];
                     _lastCache = DateTime.Now;

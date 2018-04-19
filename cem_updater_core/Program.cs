@@ -8,6 +8,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
+using cem_updater_core.Model;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -51,8 +52,8 @@ namespace cem_updater_core
                 .AddJsonFile("appsettings.json");
             Configuration = builder.Build();
 
-            DAL.connectionstring_cn = Configuration["cndb"];
-            DAL.connectionstring_tq = Configuration["tqdb"];
+            DAL.Helpers.connectionstring_cn = Configuration["cndb"];
+            DAL.Helpers.connectionstring_tq = Configuration["tqdb"];
 
 
 
@@ -125,10 +126,10 @@ namespace cem_updater_core
 
         private static void SyncTQ()
         {
-            var regions = DAL.GetRegions(true);
+            var regions = DAL.Market.GetRegions(true);
             foreach (var region in regions)
             {
-                var oldorders = DAL.GetCurrentMarkets(region, true).AsParallel();
+                var oldorders = DAL.Market.GetCurrentMarkets(region, true).AsParallel();
                 var oldlist = oldorders.GroupBy(p => p.orderid).ToDictionary(g => g.Key, g => g.First());
                 var oldorderids = oldorders.Select(p => p.orderid).ToHashSet();
                 List<ESIMarketOrder> orders;
@@ -206,7 +207,7 @@ namespace cem_updater_core
                     }
                 }
                 Log($"new:{newlist.Count},update:{updatelist.Count},del:{deletelist.Count}");
-                DAL.UpdateDatabase(newlist, updatelist, deletelist, updatedtypes, true);
+                DAL.Market.UpdateDatabase(newlist, updatelist, deletelist, updatedtypes, true);
 
 
 
@@ -306,13 +307,13 @@ namespace cem_updater_core
 
         private static void SyncCN()
         {
-            var regions = DAL.GetRegions();
+            var regions = DAL.Market.GetRegions();
 
 
 
             foreach (var region in regions)
             {
-                var oldorders = DAL.GetCurrentMarkets(region).AsParallel();
+                var oldorders = DAL.Market.GetCurrentMarkets(region).AsParallel();
                 var oldlist = oldorders.GroupBy(p => p.orderid).ToDictionary(g => g.Key, g => g.First());
                 var oldorderids = oldorders.Select(p => p.orderid).ToHashSet();
 
@@ -415,7 +416,7 @@ namespace cem_updater_core
                     }
                 }
                 Log($"new:{newlist.Count},update:{updatelist.Count},del:{deletelist.Count}");
-                DAL.UpdateDatabase(newlist, updatelist, deletelist, updatedtypes);
+                DAL.Market.UpdateDatabase(newlist, updatelist, deletelist, updatedtypes);
 
 
 

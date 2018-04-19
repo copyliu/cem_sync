@@ -1,39 +1,18 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
+using cem_updater_core.Model;
 using Npgsql;
 
-namespace cem_updater_core
+namespace cem_updater_core.DAL
 {
-    public class Helpers
+    public class Market
     {
-        public static int ConvertRange(string range)
-        {
-            if (int.TryParse(range, out var r))
-            {
-                return r;
-            }
-            switch (range)
-            {
-                case "station": return 0;
-                case "solarsystem": return 32767;
-                case "region": return 65535;
-                default: return 65535;
-            }
-        }
-    }
-    public class DAL
-    {
-        public  static string GetConnString(bool tq = false)
-        {
-            return tq ? connectionstring_tq : connectionstring_cn;
-        }
         public static List<CurrentMarket> GetCurrentMarkets(long regionid, bool tq = false)
         {
             var result = new List<CurrentMarket>();
-            using (var conn = new NpgsqlConnection(GetConnString(tq)))
+            using (var conn = new NpgsqlConnection(Helpers.GetConnString(tq)))
             {
                 conn.Open();
                 using (var cmd = new NpgsqlCommand())
@@ -80,7 +59,7 @@ namespace cem_updater_core
         {
             var system=new Dictionary<long, long>();
             var region = new Dictionary<long, long>();
-            using (var conn = new NpgsqlConnection(GetConnString(tq)))
+            using (var conn = new NpgsqlConnection(Helpers.GetConnString(tq)))
             {
                 conn.Open();
                 using (var cmd = new NpgsqlCommand())
@@ -102,13 +81,10 @@ namespace cem_updater_core
 
         }
 
-        public static string connectionstring_cn;
-        public static string connectionstring_tq;
-
         public static List<int> GetRegions(bool tq=false)
         {
             List<int> regions = new List<int>();
-            using (var conn = new NpgsqlConnection(GetConnString(tq)))
+            using (var conn = new NpgsqlConnection(Helpers.GetConnString(tq)))
             {
                 conn.Open();
 
@@ -171,7 +147,7 @@ namespace cem_updater_core
             
             Parallel.ForEach(newlist, new ParallelOptions() {MaxDegreeOfParallelism = 10}, (model) =>
             {
-                using (var conn = new NpgsqlConnection(GetConnString(tq)))
+                using (var conn = new NpgsqlConnection(Helpers.GetConnString(tq)))
                 {
                     conn.Open();
                     var cmd = new NpgsqlCommand();
@@ -200,7 +176,7 @@ namespace cem_updater_core
             });
             Parallel.ForEach(updatelist, new ParallelOptions() {MaxDegreeOfParallelism = 10}, model =>
             {
-                using (var conn = new NpgsqlConnection(GetConnString(tq)))
+                using (var conn = new NpgsqlConnection(Helpers.GetConnString(tq)))
                 {
                     conn.Open();
                     var cmd = new NpgsqlCommand();
@@ -247,7 +223,7 @@ namespace cem_updater_core
                 }
 
             });
-            using (var conn = new NpgsqlConnection(GetConnString(tq)))
+            using (var conn = new NpgsqlConnection(Helpers.GetConnString(tq)))
             {
                 conn.Open();
                 var cmd = new NpgsqlCommand();
@@ -262,7 +238,7 @@ namespace cem_updater_core
                 Parallel.ForEach(u.Value, new ParallelOptions() { MaxDegreeOfParallelism = 10 }, typeid =>
                 {
 
-                    using (var conn = new NpgsqlConnection(GetConnString(tq)))
+                    using (var conn = new NpgsqlConnection(Helpers.GetConnString(tq)))
                     {
                         conn.Open();
                         var cmd = new NpgsqlCommand();
