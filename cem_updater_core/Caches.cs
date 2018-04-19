@@ -8,13 +8,16 @@ namespace cem_updater_core
 {
     public  class Caches
     {
+        private static DateTime _lastCache=new DateTime(2000,1,1);
+        private static object _lock=new object();
         private static Dictionary<long, long> _stationSystemDictCn;
         private static Dictionary<long, long> _stationRegionDictCn;
 
-        public static Dictionary<long, long> StationSystemDictCn
+        private static Dictionary<long, long> StationSystemDictCn
         {
             get
             {
+                UpdateCaches();
                 if (_stationSystemDictCn == null || _stationSystemDictCn.Count == 0)
                 {
                     UpdateCaches();
@@ -23,10 +26,11 @@ namespace cem_updater_core
             }
         }
 
-        public static Dictionary<long, long> StationRegionDictCn    
+        private static Dictionary<long, long> StationRegionDictCn    
         {
             get
             {
+                UpdateCaches();
                 if (_stationRegionDictCn == null || _stationRegionDictCn.Count == 0)
                 {
                     UpdateCaches();
@@ -36,14 +40,21 @@ namespace cem_updater_core
 
         }
 
-        public static void UpdateCaches()
+        private static void UpdateCaches()
         {
-            var v = DAL.GetStations();
-            _stationSystemDictCn = v[0];
-            _stationRegionDictCn = v[1];
-            var w = DAL.GetStations(true);
-            _stationSystemDictTq = w[0];
-            _stationRegionDictTq = w[1];
+            lock (_lock)
+            {
+                if (_lastCache < DateTime.Now - TimeSpan.FromHours(1))
+                {
+                    var v = DAL.GetStations();
+                    _stationSystemDictCn = v[0];
+                    _stationRegionDictCn = v[1];
+                    var w = DAL.GetStations(true);
+                    _stationSystemDictTq = w[0];
+                    _stationRegionDictTq = w[1];
+                    _lastCache = DateTime.Now;
+                }
+            }
         }
 
 
@@ -51,10 +62,11 @@ namespace cem_updater_core
         private static Dictionary<long, long> _stationRegionDictTq;
         private static HttpClient _httpClient;
 
-        public static Dictionary<long, long> StationSystemDictTq
+        private static Dictionary<long, long> StationSystemDictTq
         {
             get
             {
+                UpdateCaches();
                 if (_stationSystemDictTq == null || _stationSystemDictTq.Count == 0)
                 {
                     UpdateCaches();
@@ -63,10 +75,11 @@ namespace cem_updater_core
             }
         }
 
-        public static Dictionary<long, long> StationRegionDictTq
+        private static Dictionary<long, long> StationRegionDictTq
         {
             get
             {
+                UpdateCaches();
                 if (_stationRegionDictTq == null || _stationRegionDictTq.Count == 0)
                 {
                     UpdateCaches();
@@ -78,5 +91,14 @@ namespace cem_updater_core
 
 
         public static HttpClient httpClient => _httpClient ?? (_httpClient = new HttpClient(new HttpClientHandler(){AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate}));
+
+        public static Dictionary<long, long> GetStationRegionDict(bool tq=false)
+        {
+            return tq ? StationRegionDictTq : StationRegionDictCn;
+        }
+        public static Dictionary<long, long> GetStationSystemDict(bool tq = false)
+        {
+            return tq ? StationSystemDictTq : StationSystemDictCn;
+        }
     }
 }

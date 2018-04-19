@@ -168,6 +168,7 @@ namespace cem_updater_core
 
         public static void UpdateDatabase(List<CrestOrder> newlist, List<CrestOrder> updatelist, List<long> deletelist,Dictionary<long, HashSet<int>> updatedtypelist,bool tq=false)
         {
+            
             Parallel.ForEach(newlist, new ParallelOptions() {MaxDegreeOfParallelism = 10}, (model) =>
             {
                 using (var conn = new NpgsqlConnection(GetConnString(tq)))
@@ -178,8 +179,8 @@ namespace cem_updater_core
                     cmd.CommandText =
                         @"insert into current_market  (regionid,systemid,stationid,typeid,bid,price,orderid,minvolume,volremain,volenter,issued,interval,range,reportedby,reportedtime,source) 
                                     VALUES (@regionid,@systemid,@stationid,@typeid,@bid,@price,@orderid,@minvolume,@volremain,@volenter,@issued,@interval,@range,@reportedby,@reportedtime,@source)";
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("regionid", Caches.StationRegionDictCn[model.stationID]));
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("systemid", Caches.StationSystemDictCn[model.stationID]));
+                    cmd.Parameters.Add(new NpgsqlParameter<long>("regionid", Caches.GetStationRegionDict(tq)[model.stationID]));
+                    cmd.Parameters.Add(new NpgsqlParameter<long>("systemid", Caches.GetStationSystemDict(tq)[model.stationID]));
                     cmd.Parameters.Add(new NpgsqlParameter<long>("stationid", model.stationID));
                     cmd.Parameters.Add(new NpgsqlParameter<long>("typeid", model.type));
                     cmd.Parameters.Add(new NpgsqlParameter<long>("bid", model.buy ? 1 : 0));
@@ -226,8 +227,8 @@ namespace cem_updater_core
                                 @reportedtime
                                 ) where orderid=@orderid
                                 ";
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("regionid", Caches.StationRegionDictCn[model.stationID]));
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("systemid", Caches.StationSystemDictCn[model.stationID]));
+                    cmd.Parameters.Add(new NpgsqlParameter<long>("regionid", Caches.GetStationRegionDict(tq)[model.stationID]));
+                    cmd.Parameters.Add(new NpgsqlParameter<long>("systemid", Caches.GetStationSystemDict(tq)[model.stationID]));
                     cmd.Parameters.Add(new NpgsqlParameter<long>("stationid", model.stationID));
                     cmd.Parameters.Add(new NpgsqlParameter<long>("typeid", model.type));
                     cmd.Parameters.Add(new NpgsqlParameter<long>("bid", model.buy ? 1 : 0));

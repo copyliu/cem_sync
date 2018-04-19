@@ -46,7 +46,6 @@ namespace cem_updater_core
 
         static void Main(string[] args)
         {
-//            NpgsqlLogManager.Provider = new ConsoleLoggingProvider(NpgsqlLogLevel.Debug);
             var builder = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile("appsettings.json");
@@ -126,7 +125,6 @@ namespace cem_updater_core
 
         private static void SyncTQ()
         {
-//            throw new NotImplementedException();
             var regions = DAL.GetRegions(true);
             foreach (var region in regions)
             {
@@ -152,12 +150,12 @@ namespace cem_updater_core
                 
                 foreach (var crest in orders)
                 {
-                    if (!Caches.StationRegionDictCn.ContainsKey(crest.location_id))
+                    if (!Caches.GetStationRegionDict(true).ContainsKey(crest.location_id))
                     {
                         continue; //TODO:此空间站是空堡, 暂不收录
                     }
 
-                    if (Caches.StationRegionDictCn[crest.location_id] != region)
+                    if (Caches.GetStationRegionDict(true)[crest.location_id] != region)
                     {
                         continue;
                     }
@@ -167,12 +165,12 @@ namespace cem_updater_core
                         if (crest != oldlist[crest.order_id])
                         {
                             updatelist.Add(crest);
-                            if (!updatedtypes.ContainsKey(Caches.StationRegionDictCn[crest.location_id]))
+                            if (!updatedtypes.ContainsKey(Caches.GetStationRegionDict(true)[crest.location_id]))
                             {
-                                updatedtypes.Add(Caches.StationRegionDictCn[crest.location_id], new HashSet<int>());
+                                updatedtypes.Add(Caches.GetStationRegionDict(true)[crest.location_id], new HashSet<int>());
                             }
 
-                            updatedtypes[Caches.StationRegionDictCn[crest.location_id]].Add(crest.type_id);
+                            updatedtypes[Caches.GetStationRegionDict(true)[crest.location_id]].Add(crest.type_id);
                         }
 
                         oldorderids.Remove(crest.order_id);
@@ -182,12 +180,12 @@ namespace cem_updater_core
                     {
                         newlist.Add(crest);
 
-                        if (!updatedtypes.ContainsKey(Caches.StationRegionDictCn[crest.location_id]))
+                        if (!updatedtypes.ContainsKey(Caches.GetStationRegionDict(true)[crest.location_id]))
                         {
-                            updatedtypes.Add(Caches.StationRegionDictCn[crest.location_id], new HashSet<int>());
+                            updatedtypes.Add(Caches.GetStationRegionDict(true)[crest.location_id], new HashSet<int>());
                         }
 
-                        updatedtypes[Caches.StationRegionDictCn[crest.location_id]].Add(crest.type_id);
+                        updatedtypes[Caches.GetStationRegionDict(true)[crest.location_id]].Add(crest.type_id);
                     }
 
                 }
@@ -357,12 +355,16 @@ namespace cem_updater_core
                 orders = orders.Distinct().ToList();
                 foreach (var crest in orders)
                 {
-                    if (!Caches.StationRegionDictCn.ContainsKey(crest.stationID))
+                    if (!Caches.GetStationRegionDict(false).ContainsKey(crest.stationID))
                     {
                         continue; //TODO:此空间站是空堡, 暂不收录
                     }
+                    if (Caches.GetStationRegionDict(false)[crest.stationID] != region)
+                    {
+                        continue;
+                    }
                     crest.issued = DateTime.SpecifyKind(crest.issued, DateTimeKind.Utc);
-                    if (Caches.StationRegionDictCn[crest.stationID] != region)
+                    if (Caches.GetStationRegionDict(false)[crest.stationID] != region)
                     {
                         continue;
                     }
@@ -372,12 +374,12 @@ namespace cem_updater_core
                         if (crest != oldlist[crest.id])
                         {
                             updatelist.Add(crest);
-                            if (!updatedtypes.ContainsKey(Caches.StationRegionDictCn[crest.stationID]))
+                            if (!updatedtypes.ContainsKey(Caches.GetStationRegionDict(false)[crest.stationID]))
                             {
-                                updatedtypes.Add(Caches.StationRegionDictCn[crest.stationID], new HashSet<int>());
+                                updatedtypes.Add(Caches.GetStationRegionDict(false)[crest.stationID], new HashSet<int>());
                             }
 
-                            updatedtypes[Caches.StationRegionDictCn[crest.stationID]].Add(crest.type);
+                            updatedtypes[Caches.GetStationRegionDict(false)[crest.stationID]].Add(crest.type);
                         }
 
                         oldorderids.Remove(crest.id);
@@ -387,12 +389,12 @@ namespace cem_updater_core
                     {
                         newlist.Add(crest);
 
-                        if (!updatedtypes.ContainsKey(Caches.StationRegionDictCn[crest.stationID]))
+                        if (!updatedtypes.ContainsKey(Caches.GetStationRegionDict(false)[crest.stationID]))
                         {
-                            updatedtypes.Add(Caches.StationRegionDictCn[crest.stationID], new HashSet<int>());
+                            updatedtypes.Add(Caches.GetStationRegionDict(false)[crest.stationID], new HashSet<int>());
                         }
 
-                        updatedtypes[Caches.StationRegionDictCn[crest.stationID]].Add(crest.type);
+                        updatedtypes[Caches.GetStationRegionDict(false)[crest.stationID]].Add(crest.type);
                     }
 
                 }
