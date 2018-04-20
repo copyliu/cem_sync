@@ -12,7 +12,7 @@ namespace cem_updater_core.DAL
         public static List<CurrentMarket> GetCurrentMarkets(long regionid, bool tq = false)
         {
             var result = new List<CurrentMarket>();
-            using (var conn = new NpgsqlConnection(Helpers.GetConnString(tq)))
+            using (var conn = new NpgsqlConnection(Helpers.GetMarketConnString(tq)))
             {
                 conn.Open();
                 using (var cmd = new NpgsqlCommand())
@@ -59,7 +59,7 @@ namespace cem_updater_core.DAL
         {
             var system=new Dictionary<long, long>();
             var region = new Dictionary<long, long>();
-            using (var conn = new NpgsqlConnection(Helpers.GetConnString(tq)))
+            using (var conn = new NpgsqlConnection(Helpers.GetMarketConnString(tq)))
             {
                 conn.Open();
                 using (var cmd = new NpgsqlCommand())
@@ -84,7 +84,7 @@ namespace cem_updater_core.DAL
         public static List<int> GetRegions(bool tq=false)
         {
             List<int> regions = new List<int>();
-            using (var conn = new NpgsqlConnection(Helpers.GetConnString(tq)))
+            using (var conn = new NpgsqlConnection(Helpers.GetMarketConnString(tq)))
             {
                 conn.Open();
 
@@ -147,7 +147,7 @@ namespace cem_updater_core.DAL
             
             Parallel.ForEach(newlist, new ParallelOptions() {MaxDegreeOfParallelism = 10}, (model) =>
             {
-                using (var conn = new NpgsqlConnection(Helpers.GetConnString(tq)))
+                using (var conn = new NpgsqlConnection(Helpers.GetMarketConnString(tq)))
                 {
                     conn.Open();
                     var cmd = new NpgsqlCommand();
@@ -176,7 +176,7 @@ namespace cem_updater_core.DAL
             });
             Parallel.ForEach(updatelist, new ParallelOptions() {MaxDegreeOfParallelism = 10}, model =>
             {
-                using (var conn = new NpgsqlConnection(Helpers.GetConnString(tq)))
+                using (var conn = new NpgsqlConnection(Helpers.GetMarketConnString(tq)))
                 {
                     conn.Open();
                     var cmd = new NpgsqlCommand();
@@ -223,7 +223,7 @@ namespace cem_updater_core.DAL
                 }
 
             });
-            using (var conn = new NpgsqlConnection(Helpers.GetConnString(tq)))
+            using (var conn = new NpgsqlConnection(Helpers.GetMarketConnString(tq)))
             {
                 conn.Open();
                 var cmd = new NpgsqlCommand();
@@ -238,7 +238,7 @@ namespace cem_updater_core.DAL
                 Parallel.ForEach(u.Value, new ParallelOptions() { MaxDegreeOfParallelism = 10 }, typeid =>
                 {
 
-                    using (var conn = new NpgsqlConnection(Helpers.GetConnString(tq)))
+                    using (var conn = new NpgsqlConnection(Helpers.GetMarketConnString(tq)))
                     {
                         conn.Open();
                         var cmd = new NpgsqlCommand();

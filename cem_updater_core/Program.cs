@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -52,9 +53,11 @@ namespace cem_updater_core
                 .AddJsonFile("appsettings.json");
             Configuration = builder.Build();
 
-            DAL.Helpers.connectionstring_cn = Configuration["cndb"];
-            DAL.Helpers.connectionstring_tq = Configuration["tqdb"];
+            DAL.Helpers.connectionstring_market_cn = Configuration["cndb"];
+            DAL.Helpers.connectionstring_market_tq = Configuration["tqdb"];
 
+            DAL.Helpers.connectionstring_kb_cn = Configuration["cnkbdb"];
+            DAL.Helpers.connectionstring_kb_tq = Configuration["tqkbdb"];
 
 
 
@@ -449,6 +452,142 @@ namespace cem_updater_core
             
             return crestresult;
         }
+
+
+        private static List<Esi_war_kms> EsiGetWarsKM(int war, bool tq = false)
+        {
+            string url;
+            if (tq)
+            {
+                url = "https://esi.tech.ccp.is"+ $"/v1/wars/{war}/killmails/";
+            }
+            else
+            {
+                throw new NotImplementedException("没有国服");
+            }
+
+
+
+            Log(url);
+            int pages;
+            List<Esi_war_kms> results = new List<Esi_war_kms>();
+            var httpResponse = Caches.httpClient.GetAsync(url).Result;
+
+            if (!httpResponse.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException(httpResponse.StatusCode.ToString());
+            }
+
+
+            if (!httpResponse.Headers.TryGetValues("x-pages", out var xPages) ||
+                !int.TryParse(xPages.FirstOrDefault(), out pages))
+            {
+                pages = 1;
+            }
+
+
+            using (var s = httpResponse.Content.ReadAsStreamAsync().Result)
+            {
+
+
+                using (StreamReader sr = new StreamReader(s))
+                {
+                    using (JsonReader reader = new JsonTextReader(sr))
+                    {
+                        JsonSerializer serializer = new JsonSerializer();
+                        var kmresult = serializer.Deserialize<List<Esi_war_kms>>(reader);
+                        if (kmresult != null)
+                        {
+                            results.AddRange(kmresult);
+                        }
+                    }
+                }
+
+                if (pages > 1)
+                {
+                    Parallel.ForEach(Enumerable.Range(2, pages - 2 + 1),
+                        new ParallelOptions() { MaxDegreeOfParallelism = 10 },
+                        pagenum =>
+                        {
+                            var result = GetESIKM(url + $"?page={pagenum}");
+                            if (result != null)
+                            {
+                                lock (results)
+                                {
+                                    results.AddRange(result);
+                                }
+                            }
+                        });
+                }
+
+            }
+
+            return results;
+
+
+
+        }
+        private static List<Esi_war_kms> GetESIKM(string url)
+        {
+            Log(url);
+
+            List<Esi_war_kms> crestresult;
+            using (var s = Caches.httpClient.GetStreamAsync(url).Result)
+            {
+                using (StreamReader sr = new StreamReader(s))
+                {
+                    using (JsonReader reader = new JsonTextReader(sr))
+                    {
+                        JsonSerializer serializer = new JsonSerializer();
+                        crestresult = serializer.Deserialize<List<Esi_war_kms>>(reader);
+                    }
+                }
+            }
+
+            return crestresult;
+        }
+        private static void UpdateWars(bool tq = false)
+        {
+            string url;
+            if (tq)
+            {
+                url = "https://esi.tech.ccp.is";
+            }
+            else
+            {
+                throw new NotImplementedException("没有国服");
+            }
+
+            List<int> warlist;
+            using (var s = Caches.httpClient.GetStreamAsync(url+ "/v1/wars/").Result)
+            {
+                using (StreamReader sr = new StreamReader(s))
+                {
+                    using (JsonReader reader = new JsonTextReader(sr))
+                    {
+                        JsonSerializer serializer = new JsonSerializer();
+                        warlist = serializer.Deserialize<List<int>>(reader);
+                    }
+                }
+            }
+         
+            var dbwars = DAL.KillBoard.GetWarStatus(tq);
+
+            Parallel.ForEach(Enumerable.Range(1, warlist.Max()), new ParallelOptions() {MaxDegreeOfParallelism = 10}, war =>
+            {
+                if (dbwars.ContainsKey(war) && dbwars[war][0] == 1)
+                {
+                    return;
+                }
+
+                List<Esi_war_kms> kmlist = EsiGetWarsKM(war,tq);
+
+                DAL.KillBoard.AddWaiting(kmlist.Where(p => p.killmail_id > dbwars[war][1]).ToList(), tq);
+
+            });
+        }
+
+
 
 
     }

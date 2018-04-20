@@ -19,12 +19,19 @@ namespace cem_updater_core.DAL
             }
         }
 
-        public  static string GetConnString(bool tq = false)
+        public  static string GetMarketConnString(bool tq = false)
         {
-            return tq ? connectionstring_tq : connectionstring_cn;
+            return tq ? connectionstring_market_tq : connectionstring_market_cn;
         }
 
-        public static string connectionstring_cn;
-        public static string connectionstring_tq;
+        public static string GetKBConnString(bool tq = false)
+        {
+            return tq ? connectionstring_kb_tq : connectionstring_kb_cn;
+        }
+
+        public static string connectionstring_market_cn;
+        public static string connectionstring_market_tq;
+        public static string connectionstring_kb_cn;
+        public static string connectionstring_kb_tq;
     }
 }
