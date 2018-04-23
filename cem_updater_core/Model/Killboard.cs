@@ -4,7 +4,16 @@ using System.Text;
 
 namespace cem_updater_core.Model
 {
+    public class PizzaKM
+    {
+        public int killID;
+        public class PizzaZkb
+        {
+            public string hash;
+        }
 
+        public PizzaZkb zkb;
+    }
     public class Esi_war_kms
     {
         public int killmail_id;

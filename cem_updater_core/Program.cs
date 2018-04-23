@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,10 +25,12 @@ namespace cem_updater_core
         private static bool isServiceRunning = false;
         private static System.Timers.Timer _aTimer1 = new System.Timers.Timer(1000) {AutoReset = false};
         private static System.Timers.Timer _aTimer2 = new System.Timers.Timer(1000) {AutoReset = false};
+        private static System.Timers.Timer _aTimer3 = new System.Timers.Timer(1000) {AutoReset = false};
 
         private static System.Threading.ManualResetEvent _event1 = new ManualResetEvent(true);
         private static System.Threading.ManualResetEvent _event2 = new ManualResetEvent(true);
-        private static WaitHandle[] events = {_event1, _event2};
+        private static System.Threading.ManualResetEvent _event3 = new ManualResetEvent(true);
+        private static WaitHandle[] events = {_event1, _event2, _event3};
 
         public static IConfiguration Configuration { get; set; }
 
@@ -59,13 +62,14 @@ namespace cem_updater_core
             DAL.Helpers.connectionstring_kb_cn = Configuration["cnkbdb"];
             DAL.Helpers.connectionstring_kb_tq = Configuration["tqkbdb"];
 
-
+            var cts = new CancellationTokenSource();
 
 
             bool keepRunning = true;
             isServiceRunning = true;
             _aTimer1.Start();
             _aTimer2.Start();
+            _aTimer3.Start();
             _aTimer1.Elapsed += (sender, ar) =>
             {
                 _event1.Reset();
@@ -110,6 +114,18 @@ namespace cem_updater_core
 
                 }
             };
+            _aTimer3.Elapsed += async (sender, ar) =>
+            {
+                _event3.Reset();
+                await GetStreamTQKM(cts.Token);
+                _event3.Set();
+                if (isServiceRunning)
+                {
+                    _aTimer3.Start();
+
+                }
+            };
+
 
             Console.CancelKeyPress += delegate
             {
@@ -117,6 +133,8 @@ namespace cem_updater_core
                 isServiceRunning = false;
                 _aTimer1.Stop();
                 _aTimer2.Stop();
+                _aTimer3.Stop();
+                cts.Cancel();
                 WaitHandle.WaitAll(events);
                 Log("Exited!");
                 keepRunning = false;
@@ -151,7 +169,7 @@ namespace cem_updater_core
                 List<ESIMarketOrder> newlist = new List<ESIMarketOrder>();
                 List<ESIMarketOrder> updatelist = new List<ESIMarketOrder>();
                 Dictionary<long, HashSet<int>> updatedtypes = new Dictionary<long, HashSet<int>>();
-                
+
                 foreach (var crest in orders)
                 {
                     if (!Caches.GetStationRegionDict(true).ContainsKey(crest.location_id))
@@ -163,6 +181,7 @@ namespace cem_updater_core
                     {
                         continue;
                     }
+
                     if (oldorderids.Contains(crest.order_id))
                     {
 
@@ -171,7 +190,8 @@ namespace cem_updater_core
                             updatelist.Add(crest);
                             if (!updatedtypes.ContainsKey(Caches.GetStationRegionDict(true)[crest.location_id]))
                             {
-                                updatedtypes.Add(Caches.GetStationRegionDict(true)[crest.location_id], new HashSet<int>());
+                                updatedtypes.Add(Caches.GetStationRegionDict(true)[crest.location_id],
+                                    new HashSet<int>());
                             }
 
                             updatedtypes[Caches.GetStationRegionDict(true)[crest.location_id]].Add(crest.type_id);
@@ -209,6 +229,7 @@ namespace cem_updater_core
                         updatedtypes[oldorder.regionid].Add(typeid);
                     }
                 }
+
                 Log($"new:{newlist.Count},update:{updatelist.Count},del:{deletelist.Count}");
                 DAL.Market.UpdateDatabase(newlist, updatelist, deletelist, updatedtypes, true);
 
@@ -235,7 +256,7 @@ namespace cem_updater_core
             int pages;
             List<ESIMarketOrder> results = new List<ESIMarketOrder>();
             var httpResponse = Caches.httpClient.GetAsync(url).Result;
-            
+
             if (!httpResponse.IsSuccessStatusCode)
             {
                 throw new HttpRequestException(httpResponse.StatusCode.ToString());
@@ -247,11 +268,11 @@ namespace cem_updater_core
             {
                 pages = 1;
             }
-          
+
 
             using (var s = httpResponse.Content.ReadAsStreamAsync().Result)
             {
-               
+
 
                 using (StreamReader sr = new StreamReader(s))
                 {
@@ -291,7 +312,7 @@ namespace cem_updater_core
         private static List<ESIMarketOrder> GetESIOrders(string url)
         {
             Log(url);
-            
+
             List<ESIMarketOrder> crestresult;
             using (var s = Caches.httpClient.GetStreamAsync(url).Result)
             {
@@ -352,7 +373,7 @@ namespace cem_updater_core
                     continue;
                 }
 
-               
+
                 List<CrestOrder> newlist = new List<CrestOrder>();
                 List<CrestOrder> updatelist = new List<CrestOrder>();
                 Dictionary<long, HashSet<int>> updatedtypes = new Dictionary<long, HashSet<int>>();
@@ -363,15 +384,18 @@ namespace cem_updater_core
                     {
                         continue; //TODO:此空间站是空堡, 暂不收录
                     }
+
                     if (Caches.GetStationRegionDict(false)[crest.stationID] != region)
                     {
                         continue;
                     }
+
                     crest.issued = DateTime.SpecifyKind(crest.issued, DateTimeKind.Utc);
                     if (Caches.GetStationRegionDict(false)[crest.stationID] != region)
                     {
                         continue;
                     }
+
                     if (oldorderids.Contains(crest.id))
                     {
 
@@ -380,7 +404,8 @@ namespace cem_updater_core
                             updatelist.Add(crest);
                             if (!updatedtypes.ContainsKey(Caches.GetStationRegionDict(false)[crest.stationID]))
                             {
-                                updatedtypes.Add(Caches.GetStationRegionDict(false)[crest.stationID], new HashSet<int>());
+                                updatedtypes.Add(Caches.GetStationRegionDict(false)[crest.stationID],
+                                    new HashSet<int>());
                             }
 
                             updatedtypes[Caches.GetStationRegionDict(false)[crest.stationID]].Add(crest.type);
@@ -418,6 +443,7 @@ namespace cem_updater_core
                         updatedtypes[oldorder.regionid].Add(typeid);
                     }
                 }
+
                 Log($"new:{newlist.Count},update:{updatelist.Count},del:{deletelist.Count}");
                 DAL.Market.UpdateDatabase(newlist, updatelist, deletelist, updatedtypes);
 
@@ -435,9 +461,9 @@ namespace cem_updater_core
         private static CrestMarketResult GetCrestMarketResult(string url)
         {
             Log(url);
-            
+
             CrestMarketResult crestresult;
-            
+
             using (var s = Caches.httpClient.GetStreamAsync(url).Result)
             {
                 using (StreamReader sr = new StreamReader(s))
@@ -449,7 +475,7 @@ namespace cem_updater_core
                     }
                 }
             }
-            
+
             return crestresult;
         }
 
@@ -459,7 +485,7 @@ namespace cem_updater_core
             string url;
             if (tq)
             {
-                url = "https://esi.tech.ccp.is"+ $"/v1/wars/{war}/killmails/";
+                url = "https://esi.tech.ccp.is" + $"/v1/wars/{war}/killmails/";
             }
             else
             {
@@ -506,7 +532,7 @@ namespace cem_updater_core
                 if (pages > 1)
                 {
                     Parallel.ForEach(Enumerable.Range(2, pages - 2 + 1),
-                        new ParallelOptions() { MaxDegreeOfParallelism = 10 },
+                        new ParallelOptions() {MaxDegreeOfParallelism = 10},
                         pagenum =>
                         {
                             var result = GetESIKM(url + $"?page={pagenum}");
@@ -527,6 +553,7 @@ namespace cem_updater_core
 
 
         }
+
         private static List<Esi_war_kms> GetESIKM(string url)
         {
             Log(url);
@@ -546,6 +573,7 @@ namespace cem_updater_core
 
             return crestresult;
         }
+
         private static void UpdateWars(bool tq = false)
         {
             string url;
@@ -559,7 +587,7 @@ namespace cem_updater_core
             }
 
             List<int> warlist;
-            using (var s = Caches.httpClient.GetStreamAsync(url+ "/v1/wars/").Result)
+            using (var s = Caches.httpClient.GetStreamAsync(url + "/v1/wars/").Result)
             {
                 using (StreamReader sr = new StreamReader(s))
                 {
@@ -570,24 +598,98 @@ namespace cem_updater_core
                     }
                 }
             }
-         
+
             var dbwars = DAL.KillBoard.GetWarStatus(tq);
 
-            Parallel.ForEach(Enumerable.Range(1, warlist.Max()), new ParallelOptions() {MaxDegreeOfParallelism = 10}, war =>
-            {
-                if (dbwars.ContainsKey(war) && dbwars[war][0] == 1)
+            Parallel.ForEach(Enumerable.Range(1, warlist.Max()), new ParallelOptions() {MaxDegreeOfParallelism = 10},
+                war =>
                 {
-                    return;
-                }
+                    if (dbwars.ContainsKey(war) && dbwars[war][0] == 1)
+                    {
+                        return;
+                    }
 
-                List<Esi_war_kms> kmlist = EsiGetWarsKM(war,tq);
+                    List<Esi_war_kms> kmlist = EsiGetWarsKM(war, tq);
 
-                DAL.KillBoard.AddWaiting(kmlist.Where(p => p.killmail_id > dbwars[war][1]).ToList(), tq);
+                    DAL.KillBoard.AddWaiting(kmlist.Where(p => p.killmail_id > dbwars[war][1]).ToList(), tq);
 
-            });
+                });
         }
 
 
+        public static async Task GetStreamTQKM(CancellationToken cancellationToken)
+        {
+            using (ClientWebSocket webSocket = new ClientWebSocket())
+            {
+                try
+                {
+
+                    await webSocket.ConnectAsync(new Uri("wss://api.pizza.moe/stream/killmails/"), cancellationToken);
+                    await Task.WhenAll(Receive(webSocket, cancellationToken));
+                }
+                catch (OperationCanceledException)
+                {
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Exception: {0}", ex);
+                }
+                finally
+                {
+                    webSocket?.Dispose();
+                }
+            }
+
+
+        }
+
+        private static async Task Receive(ClientWebSocket webSocket, CancellationToken cancellationToken)
+        {
+            var buffer = new byte[1000];
+            var offset = 0;
+            var free = buffer.Length;
+            byte[] fullbuffer;
+            while (webSocket.State == WebSocketState.Open)
+            {
+                var result =
+                    await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer, offset, free), cancellationToken);
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, cancellationToken);
+                }
+
+                fullbuffer = new byte[result.Count];
+                Array.Copy(buffer, fullbuffer, result.Count);
+
+
+                while (!result.EndOfMessage)
+                {
+                    result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer, offset, free),
+                        cancellationToken);
+                    var tmp = new byte[fullbuffer.Length + result.Count];
+                    Buffer.BlockCopy(fullbuffer, 0, tmp, 0, fullbuffer.Length);
+                    Buffer.BlockCopy(buffer, 0, tmp, fullbuffer.Length, result.Count);
+                    fullbuffer = tmp;
+                }
+
+                using (StreamReader sr = new StreamReader(new MemoryStream(fullbuffer)))
+                {
+                    using (JsonReader reader = new JsonTextReader(sr))
+                    {
+                        JsonSerializer serializer = new JsonSerializer();
+                        var crestresult = serializer.Deserialize<PizzaKM>(reader);
+                        if (crestresult != null)
+                        {
+                            Log($"TQ NEW KM: {crestresult.killID}/{crestresult.zkb?.hash}");
+                            DAL.KillBoard.AddWaiting(
+                                new Kb_waiting_api() {killID = crestresult.killID, hash = crestresult.zkb?.hash},
+                                tq: true);
+                        }
+                    }
+                }
+
+            }
+        }
 
 
     }

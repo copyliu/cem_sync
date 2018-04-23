@@ -18,7 +18,7 @@ namespace cem_updater_core.DAL
                 using (var cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "INSERT INTO killboard_waiting_api (killID, hash) VALUES (@id,@hash);";
+                    cmd.CommandText = "INSERT INTO killboard_waiting_api (\"killID\", hash) VALUES (@id,@hash);";
                     cmd.Parameters.AddWithValue("id", model.killmail_id);
                     cmd.Parameters.AddWithValue("hash", model.killmail_hash);
                     cmd.ExecuteNonQuery();
@@ -42,7 +42,7 @@ namespace cem_updater_core.DAL
                 using (var cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "INSERT INTO killboard_waiting_api (killID, hash) VALUES (@id,@hash);";
+                    cmd.CommandText = "INSERT INTO killboard_waiting_api (\"killID\", hash) VALUES (@id,@hash);";
                     cmd.Parameters.AddWithValue("id", model.killID);
                     cmd.Parameters.AddWithValue("hash", model.hash);
                     cmd.ExecuteNonQuery();
