@@ -10,6 +10,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
+using cem_updater_core.DAL;
 using cem_updater_core.Model;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
@@ -67,9 +68,7 @@ namespace cem_updater_core
 
             bool keepRunning = true;
             isServiceRunning = true;
-            _aTimer1.Start();
-            _aTimer2.Start();
-            _aTimer3.Start();
+
             _aTimer1.Elapsed += (sender, ar) =>
             {
                 _event1.Reset();
@@ -126,7 +125,9 @@ namespace cem_updater_core
                 }
             };
 
-
+            _aTimer1.Start();
+            _aTimer2.Start();
+            _aTimer3.Start();
             Console.CancelKeyPress += delegate
             {
                 Log("Shutting Down");
@@ -145,18 +146,24 @@ namespace cem_updater_core
             }
         }
 
-        private static void SyncTQ()
+        private static async void SyncTQ()
         {
             var regions = DAL.Market.GetRegions(true);
             foreach (var region in regions)
             {
-                var oldorders = DAL.Market.GetCurrentMarkets(region, true).AsParallel();
-                var oldlist = oldorders.GroupBy(p => p.orderid).ToDictionary(g => g.Key, g => g.First());
-                var oldorderids = oldorders.Select(p => p.orderid).ToHashSet();
+                
+           
+                var oldorderstask = DAL.Market.GetCurrentMarkets(region, true);
+
                 List<ESIMarketOrder> orders;
                 try
                 {
                     orders = GetESIOrders(region, true).Distinct().ToList();
+                }
+                catch (WrongMarketSnapShotException e)
+                {
+                    Log(e.ToString());
+                    continue;
                 }
                 catch (Exception e)
                 {
@@ -164,7 +171,9 @@ namespace cem_updater_core
                     continue;
                 }
 
-
+                var oldorders = await oldorderstask;
+                var oldlist = oldorders.GroupBy(p => p.orderid).ToDictionary(g => g.Key, g => g.First());
+                var oldorderids = oldorders.Select(p => p.orderid).ToHashSet();
 
                 List<ESIMarketOrder> newlist = new List<ESIMarketOrder>();
                 List<ESIMarketOrder> updatelist = new List<ESIMarketOrder>();
@@ -230,7 +239,7 @@ namespace cem_updater_core
                     }
                 }
 
-                Log($"new:{newlist.Count},update:{updatelist.Count},del:{deletelist.Count}");
+                Log($"RegionID {region}:new:{newlist.Count},update:{updatelist.Count},del:{deletelist.Count}");
                 DAL.Market.UpdateDatabase(newlist, updatelist, deletelist, updatedtypes, true);
 
 
@@ -238,14 +247,16 @@ namespace cem_updater_core
 
 
             }
+
+           
         }
 
-        private static List<ESIMarketOrder> GetESIOrders(int regionid, bool tq = false)
+        private static List<ESIMarketOrder> GetESIOrders(int regionid,  bool tq = false)
         {
             string url;
             if (tq)
             {
-                url = $"https://esi.tech.ccp.is/v1/markets/{regionid}/orders/?datasource=tranquility&order_type=all";
+                url = $"https://esi.evetech.net/v1/markets/{regionid}/orders/?datasource=tranquility&order_type=all";
             }
             else
             {
@@ -254,67 +265,49 @@ namespace cem_updater_core
 
             Log(url);
             int pages;
-            List<ESIMarketOrder> results = new List<ESIMarketOrder>();
-            var httpResponse = Caches.httpClient.GetAsync(url).Result;
 
-            if (!httpResponse.IsSuccessStatusCode)
-            {
-                throw new HttpRequestException(httpResponse.StatusCode.ToString());
-            }
-
-
-            if (!httpResponse.Headers.TryGetValues("x-pages", out var xPages) ||
+            var headresponse = Caches.httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, url)).Result;
+            var lastModified = headresponse.Content.Headers.LastModified;
+            if (!headresponse.Headers.TryGetValues("x-pages", out var xPages) ||
                 !int.TryParse(xPages.FirstOrDefault(), out pages))
             {
                 pages = 1;
             }
 
-
-            using (var s = httpResponse.Content.ReadAsStreamAsync().Result)
-            {
-
-
-                using (StreamReader sr = new StreamReader(s))
+            List<ESIMarketOrder> results = new List<ESIMarketOrder>();
+            Parallel.ForEach(Enumerable.Range(1, pages  ),
+                new ParallelOptions() { MaxDegreeOfParallelism = 10 },
+                pagenum =>
                 {
-                    using (JsonReader reader = new JsonTextReader(sr))
+                    var result = GetESIOrders(url + $"&page={pagenum}", lastModified);
+                    if (result != null)
                     {
-                        JsonSerializer serializer = new JsonSerializer();
-                        var crestresult = serializer.Deserialize<List<ESIMarketOrder>>(reader);
-                        if (crestresult != null)
+                        lock (results)
                         {
-                            results.AddRange(crestresult);
+                            results.AddRange(result);
                         }
                     }
-                }
+                });
 
-                if (pages > 1)
-                {
-                    Parallel.ForEach(Enumerable.Range(2, pages - 2 + 1),
-                        new ParallelOptions() {MaxDegreeOfParallelism = 10},
-                        pagenum =>
-                        {
-                            var result = GetESIOrders(url + $"&page={pagenum}");
-                            if (result != null)
-                            {
-                                lock (results)
-                                {
-                                    results.AddRange(result);
-                                }
-                            }
-                        });
-                }
 
-            }
+
 
             return results;
         }
 
-        private static List<ESIMarketOrder> GetESIOrders(string url)
+        private static List<ESIMarketOrder> GetESIOrders(string url, DateTimeOffset? lastmod=null)
         {
             Log(url);
 
             List<ESIMarketOrder> crestresult;
-            using (var s = Caches.httpClient.GetStreamAsync(url).Result)
+            var message = Caches.httpClient.GetAsync(url).Result;
+            if (message.Content.Headers.LastModified != lastmod)
+            {
+                throw new WrongMarketSnapShotException(lastmod, message.Content.Headers.LastModified);
+                
+            }
+            
+            using (var s = message.Content.ReadAsStreamAsync().Result)
             {
                 using (StreamReader sr = new StreamReader(s))
                 {
@@ -329,7 +322,7 @@ namespace cem_updater_core
             return crestresult;
         }
 
-        private static void SyncCN()
+        private static async void SyncCN()
         {
             var regions = DAL.Market.GetRegions();
 
@@ -337,10 +330,8 @@ namespace cem_updater_core
 
             foreach (var region in regions)
             {
-                var oldorders = DAL.Market.GetCurrentMarkets(region).AsParallel();
-                var oldlist = oldorders.GroupBy(p => p.orderid).ToDictionary(g => g.Key, g => g.First());
-                var oldorderids = oldorders.Select(p => p.orderid).ToHashSet();
-
+                var oldorderstask = DAL.Market.GetCurrentMarkets(region);
+               
                 string url = $"https://api-serenity.eve-online.com.cn/market/{region}/orders/all/";
 
                 CrestMarketResult crestresult = null;
@@ -373,6 +364,9 @@ namespace cem_updater_core
                     continue;
                 }
 
+                var oldorders = await oldorderstask;
+                var oldlist = oldorders.GroupBy(p => p.orderid).ToDictionary(g => g.Key, g => g.First());
+                var oldorderids = oldorders.Select(p => p.orderid).ToHashSet();
 
                 List<CrestOrder> newlist = new List<CrestOrder>();
                 List<CrestOrder> updatelist = new List<CrestOrder>();
@@ -485,7 +479,7 @@ namespace cem_updater_core
             string url;
             if (tq)
             {
-                url = "https://esi.tech.ccp.is" + $"/v1/wars/{war}/killmails/";
+                url = "https://esi.evetech.net" + $"/v1/wars/{war}/killmails/";
             }
             else
             {
@@ -579,7 +573,7 @@ namespace cem_updater_core
             string url;
             if (tq)
             {
-                url = "https://esi.tech.ccp.is";
+                url = "https://esi.evetech.net";
             }
             else
             {

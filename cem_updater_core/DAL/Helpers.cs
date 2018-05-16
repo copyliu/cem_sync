@@ -2,6 +2,24 @@
 
 namespace cem_updater_core.DAL
 {
+    public class WrongMarketSnapShotException : Exception
+    {
+        private readonly DateTimeOffset? _old;
+        private readonly DateTimeOffset? _new;
+
+        public WrongMarketSnapShotException(DateTimeOffset? old, DateTimeOffset? new_)
+        {
+            _old = old;
+            _new = new_;
+        }
+
+        public override string ToString()
+        {
+            return $"WrongMarketSnapShotException: old:{_old}/new:{_new}";
+
+        }
+    }
+
     public class Helpers
     {
         public static int ConvertRange(string range)

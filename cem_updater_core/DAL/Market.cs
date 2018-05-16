@@ -9,48 +9,53 @@ namespace cem_updater_core.DAL
 {
     public class Market
     {
-        public static List<CurrentMarket> GetCurrentMarkets(long regionid, bool tq = false)
+        public static async Task<List<CurrentMarket>> GetCurrentMarkets(long regionid, bool tq = false)
         {
             var result = new List<CurrentMarket>();
-            using (var conn = new NpgsqlConnection(Helpers.GetMarketConnString(tq)))
+            await Task.Run(() =>
             {
-                conn.Open();
-                using (var cmd = new NpgsqlCommand())
+                using (var conn = new NpgsqlConnection(Helpers.GetMarketConnString(tq)))
                 {
-                    cmd.Connection = conn;
-                    cmd.CommandText = "select * from current_market where regionid=@region;";
-                    cmd.Parameters.AddWithValue("region", regionid);
-                    using (var reader = cmd.ExecuteReader())
+                    conn.Open();
+                    using (var cmd = new NpgsqlCommand())
                     {
-                        while (reader.Read())
+                        cmd.Connection = conn;
+                        cmd.CommandText = "select * from current_market where regionid=@region;";
+                        cmd.Parameters.AddWithValue("region", regionid);
+
+                        using (var reader = cmd.ExecuteReader())
                         {
-                            result.Add(new CurrentMarket()
+                            while (reader.Read())
                             {
-                                id = (long)reader["id"],
-                                regionid = (long)reader["regionid"],
-                                systemid = (long)reader["systemid"],
-                                stationid = (long)reader["stationid"],
-                                typeid = (int)reader["typeid"],
-                                bid = (int)reader["bid"],
-                                price = (double)reader["price"],
-                                orderid = (long)reader["orderid"],
-                                minvolume = (int)reader["minvolume"],
-                                volremain = (int)reader["volremain"],
-                                volenter = (int)reader["volenter"],
-                                issued = (DateTime)reader["issued"],
-                                range = (int)reader["range"],
-                                reportedby = (long)reader["reportedby"],
-                                reportedtime = (DateTime)reader["reportedtime"],
-                                source = (int)reader["source"],
-                                interval = (int)reader["interval"],
+                                result.Add(new CurrentMarket()
+                                {
+                                    id = (long) reader["id"],
+                                    regionid = (long) reader["regionid"],
+                                    systemid = (long) reader["systemid"],
+                                    stationid = (long) reader["stationid"],
+                                    typeid = (int) reader["typeid"],
+                                    bid = (int) reader["bid"],
+                                    price = (double) reader["price"],
+                                    orderid = (long) reader["orderid"],
+                                    minvolume = (int) reader["minvolume"],
+                                    volremain = (int) reader["volremain"],
+                                    volenter = (int) reader["volenter"],
+                                    issued = (DateTime) reader["issued"],
+                                    range = (int) reader["range"],
+                                    reportedby = (long) reader["reportedby"],
+                                    reportedtime = (DateTime) reader["reportedtime"],
+                                    source = (int) reader["source"],
+                                    interval = (int) reader["interval"],
 
-                            });
+                                });
 
+                            }
                         }
-                    }
 
+                    }
                 }
-            }
+            });
+            
 
             return result;
 
