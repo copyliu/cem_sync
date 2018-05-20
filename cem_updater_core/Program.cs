@@ -127,7 +127,16 @@ namespace cem_updater_core
 
             _aTimer1.Start();
             _aTimer2.Start();
-            _aTimer3.Start();
+//            _aTimer3.Start();
+
+            new Thread(async () =>
+            {
+                while (isServiceRunning)
+                {
+                    await GetZKBKM(cts.Token);
+                }
+            }).Start();
+
             Console.CancelKeyPress += delegate
             {
                 Log("Shutting Down");
@@ -144,6 +153,41 @@ namespace cem_updater_core
             {
                 Thread.Sleep(1000);
             }
+        }
+
+        private static async Task GetZKBKM(CancellationToken ctsToken)
+        {
+            try
+            {
+                var response =await Caches.httpClient.GetAsync("https://redisq.zkillboard.com/listen.php?queueID=ceve-market.org&ttw=5",
+                    ctsToken);
+                using (StreamReader sr = new StreamReader(await response.Content.ReadAsStreamAsync()))
+                {
+                    using (JsonReader reader = new JsonTextReader(sr))
+                    {
+                        JsonSerializer serializer = new JsonSerializer();
+                        var crestresult = serializer.Deserialize<RedisQ>(reader);
+                        if (crestresult != null && crestresult.package!=null)
+                        {
+                            Log($"TQ NEW KM: {crestresult.package.killID}/{crestresult.package.zkb?.hash}");
+                            DAL.KillBoard.AddWaiting(
+                                new Kb_waiting_api() { killID = crestresult.package.killID, hash = crestresult.package.zkb?.hash },
+                                tq: true);
+                        }
+                    }
+                }
+               
+
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Exception: {0}", ex);
+            }
+           
+            
         }
 
         private static async void SyncTQ()

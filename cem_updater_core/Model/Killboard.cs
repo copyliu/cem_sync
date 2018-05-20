@@ -4,6 +4,10 @@ using System.Text;
 
 namespace cem_updater_core.Model
 {
+    public class RedisQ
+    {
+        public PizzaKM package;
+    }
     public class PizzaKM
     {
         public int killID;
