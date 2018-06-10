@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -149,45 +150,58 @@ namespace cem_updater_core.DAL
 
         public static void UpdateDatabase(List<CrestOrder> newlist, List<CrestOrder> updatelist, List<long> deletelist,Dictionary<long, HashSet<int>> updatedtypelist,bool tq=false)
         {
-            
+            var exceptions = new ConcurrentQueue<Exception>();
+
             Parallel.ForEach(newlist, new ParallelOptions() {MaxDegreeOfParallelism = 10}, (model) =>
             {
-                using (var conn = new NpgsqlConnection(Helpers.GetMarketConnString(tq)))
+                try
                 {
-                    conn.Open();
-                    var cmd = new NpgsqlCommand();
-                    cmd.Connection = conn;
-                    cmd.CommandText =
-                        @"insert into current_market  (regionid,systemid,stationid,typeid,bid,price,orderid,minvolume,volremain,volenter,issued,interval,range,reportedby,reportedtime,source) 
+                    using (var conn = new NpgsqlConnection(Helpers.GetMarketConnString(tq)))
+                    {
+                        conn.Open();
+                        var cmd = new NpgsqlCommand();
+                        cmd.Connection = conn;
+                        cmd.CommandText =
+                            @"insert into current_market  (regionid,systemid,stationid,typeid,bid,price,orderid,minvolume,volremain,volenter,issued,interval,range,reportedby,reportedtime,source) 
                                     VALUES (@regionid,@systemid,@stationid,@typeid,@bid,@price,@orderid,@minvolume,@volremain,@volenter,@issued,@interval,@range,@reportedby,@reportedtime,@source)";
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("regionid", Caches.GetStationRegionDict(tq)[model.stationID]));
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("systemid", Caches.GetStationSystemDict(tq)[model.stationID]));
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("stationid", model.stationID));
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("typeid", model.type));
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("bid", model.buy ? 1 : 0));
-                    cmd.Parameters.Add(new NpgsqlParameter<double>("price", model.price));
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("orderid", model.id));
-                    cmd.Parameters.Add(new NpgsqlParameter<int>("minvolume", model.minVolume));
-                    cmd.Parameters.Add(new NpgsqlParameter<int>("volremain", model.volume));
-                    cmd.Parameters.Add(new NpgsqlParameter<int>("volenter", model.volumeEntered));
-                    cmd.Parameters.Add(new NpgsqlParameter<DateTime>("issued", model.issued));
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("interval", model.duration));
-                    cmd.Parameters.Add(new NpgsqlParameter<int>("range", Helpers.ConvertRange(model.range)));
-                    cmd.Parameters.Add(new NpgsqlParameter<int>("reportedby", 0));
-                    cmd.Parameters.Add(new NpgsqlParameter<DateTime>("reportedtime", DateTime.Now));
-                    cmd.Parameters.Add(new NpgsqlParameter<int>("source", 0));
-                    cmd.ExecuteNonQuery();
+                        cmd.Parameters.Add(new NpgsqlParameter<long>("regionid", Caches.GetStationRegionDict(tq)[model.stationID]));
+                        cmd.Parameters.Add(new NpgsqlParameter<long>("systemid", Caches.GetStationSystemDict(tq)[model.stationID]));
+                        cmd.Parameters.Add(new NpgsqlParameter<long>("stationid", model.stationID));
+                        cmd.Parameters.Add(new NpgsqlParameter<long>("typeid", model.type));
+                        cmd.Parameters.Add(new NpgsqlParameter<long>("bid", model.buy ? 1 : 0));
+                        cmd.Parameters.Add(new NpgsqlParameter<double>("price", model.price));
+                        cmd.Parameters.Add(new NpgsqlParameter<long>("orderid", model.id));
+                        cmd.Parameters.Add(new NpgsqlParameter<int>("minvolume", model.minVolume));
+                        cmd.Parameters.Add(new NpgsqlParameter<int>("volremain", model.volume));
+                        cmd.Parameters.Add(new NpgsqlParameter<int>("volenter", model.volumeEntered));
+                        cmd.Parameters.Add(new NpgsqlParameter<DateTime>("issued", model.issued));
+                        cmd.Parameters.Add(new NpgsqlParameter<long>("interval", model.duration));
+                        cmd.Parameters.Add(new NpgsqlParameter<int>("range", Helpers.ConvertRange(model.range)));
+                        cmd.Parameters.Add(new NpgsqlParameter<int>("reportedby", 0));
+                        cmd.Parameters.Add(new NpgsqlParameter<DateTime>("reportedtime", DateTime.Now));
+                        cmd.Parameters.Add(new NpgsqlParameter<int>("source", 0));
+                        cmd.ExecuteNonQuery();
+                    }
                 }
+                catch (Exception e)
+                {
+                    exceptions.Enqueue(e);
+                   
+                }
+                
             });
+            if (exceptions.Count > 0) throw new AggregateException(exceptions);
             Parallel.ForEach(updatelist, new ParallelOptions() {MaxDegreeOfParallelism = 10}, model =>
             {
-                using (var conn = new NpgsqlConnection(Helpers.GetMarketConnString(tq)))
+                try
                 {
-                    conn.Open();
-                    var cmd = new NpgsqlCommand();
-                    cmd.Connection = conn;
-                    cmd.CommandText =
-                        @"update current_market set
+                    using (var conn = new NpgsqlConnection(Helpers.GetMarketConnString(tq)))
+                    {
+                        conn.Open();
+                        var cmd = new NpgsqlCommand();
+                        cmd.Connection = conn;
+                        cmd.CommandText =
+                            @"update current_market set
                                 (regionid,systemid,stationid,typeid,bid,price,orderid,minvolume,volremain,volenter,issued,interval,range,reportedby,reportedtime)
                                  =
                                 (
@@ -208,26 +222,33 @@ namespace cem_updater_core.DAL
                                 @reportedtime
                                 ) where orderid=@orderid
                                 ";
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("regionid", Caches.GetStationRegionDict(tq)[model.stationID]));
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("systemid", Caches.GetStationSystemDict(tq)[model.stationID]));
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("stationid", model.stationID));
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("typeid", model.type));
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("bid", model.buy ? 1 : 0));
-                    cmd.Parameters.Add(new NpgsqlParameter<double>("price", model.price));
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("orderid", model.id));
-                    cmd.Parameters.Add(new NpgsqlParameter<int>("minvolume", model.minVolume));
-                    cmd.Parameters.Add(new NpgsqlParameter<int>("volremain", model.volume));
-                    cmd.Parameters.Add(new NpgsqlParameter<int>("volenter", model.volumeEntered));
-                    cmd.Parameters.Add(new NpgsqlParameter<DateTime>("issued", model.issued));
-                    cmd.Parameters.Add(new NpgsqlParameter<long>("interval", model.duration));
-                    cmd.Parameters.Add(new NpgsqlParameter<int>("range", Helpers.ConvertRange(model.range)));
-                    cmd.Parameters.Add(new NpgsqlParameter<int>("reportedby", 0));
-                    cmd.Parameters.Add(new NpgsqlParameter<DateTime>("reportedtime", DateTime.Now));
-                    cmd.Parameters.Add(new NpgsqlParameter<int>("source", 0));
-                    cmd.ExecuteNonQuery();
+                        cmd.Parameters.Add(new NpgsqlParameter<long>("regionid", Caches.GetStationRegionDict(tq)[model.stationID]));
+                        cmd.Parameters.Add(new NpgsqlParameter<long>("systemid", Caches.GetStationSystemDict(tq)[model.stationID]));
+                        cmd.Parameters.Add(new NpgsqlParameter<long>("stationid", model.stationID));
+                        cmd.Parameters.Add(new NpgsqlParameter<long>("typeid", model.type));
+                        cmd.Parameters.Add(new NpgsqlParameter<long>("bid", model.buy ? 1 : 0));
+                        cmd.Parameters.Add(new NpgsqlParameter<double>("price", model.price));
+                        cmd.Parameters.Add(new NpgsqlParameter<long>("orderid", model.id));
+                        cmd.Parameters.Add(new NpgsqlParameter<int>("minvolume", model.minVolume));
+                        cmd.Parameters.Add(new NpgsqlParameter<int>("volremain", model.volume));
+                        cmd.Parameters.Add(new NpgsqlParameter<int>("volenter", model.volumeEntered));
+                        cmd.Parameters.Add(new NpgsqlParameter<DateTime>("issued", model.issued));
+                        cmd.Parameters.Add(new NpgsqlParameter<long>("interval", model.duration));
+                        cmd.Parameters.Add(new NpgsqlParameter<int>("range", Helpers.ConvertRange(model.range)));
+                        cmd.Parameters.Add(new NpgsqlParameter<int>("reportedby", 0));
+                        cmd.Parameters.Add(new NpgsqlParameter<DateTime>("reportedtime", DateTime.Now));
+                        cmd.Parameters.Add(new NpgsqlParameter<int>("source", 0));
+                        cmd.ExecuteNonQuery();
+                    }
+
+                }
+                catch (Exception e)
+                {
+                    exceptions.Enqueue(e);
                 }
 
             });
+            if (exceptions.Count > 0) throw new AggregateException(exceptions);
             using (var conn = new NpgsqlConnection(Helpers.GetMarketConnString(tq)))
             {
                 conn.Open();
@@ -243,97 +264,105 @@ namespace cem_updater_core.DAL
                 Parallel.ForEach(u.Value, new ParallelOptions() { MaxDegreeOfParallelism = 10 }, typeid =>
                 {
 
-                    using (var conn = new NpgsqlConnection(Helpers.GetMarketConnString(tq)))
+                    try
                     {
-                        conn.Open();
-                        var cmd = new NpgsqlCommand();
-                        cmd.Connection = conn;
-                        cmd.CommandText = @"select max(price),sum(volremain) from current_market where typeid=@typeid and regionid=@regionid and bid=1;
+                        using (var conn = new NpgsqlConnection(Helpers.GetMarketConnString(tq)))
+                        {
+                            conn.Open();
+                            var cmd = new NpgsqlCommand();
+                            cmd.Connection = conn;
+                            cmd.CommandText = @"select max(price),sum(volremain) from current_market where typeid=@typeid and regionid=@regionid and bid=1;
                                             select min(price),sum(volremain) from current_market where typeid=@typeid and regionid=@regionid and bid=0;";
-                        cmd.Parameters.AddWithValue("typeid", typeid);
-                        cmd.Parameters.AddWithValue("regionid", u.Key);
-                        double sellprice = 0;
-                        double buyprice = 0;
-                        long sellvol = 0;
-                        long buyvol = 0;
-                        using (var reader = cmd.ExecuteReader())
-                        {
-                           
-                            while (reader.Read())
+                            cmd.Parameters.AddWithValue("typeid", typeid);
+                            cmd.Parameters.AddWithValue("regionid", u.Key);
+                            double sellprice = 0;
+                            double buyprice = 0;
+                            long sellvol = 0;
+                            long buyvol = 0;
+                            using (var reader = cmd.ExecuteReader())
                             {
-                                buyprice  = reader.IsDBNull(0)? 0:reader.GetDouble(0);
-                                buyvol = reader.IsDBNull(1) ? 0 : reader.GetInt64(1);
-                            }
 
-                            reader.NextResult();
-                            while (reader.Read())
-                            {
-                                sellprice = reader.IsDBNull(0) ? 0 : reader.GetDouble(0);
-                                sellvol = reader.IsDBNull(1) ? 0 : reader.GetInt64(1);
-                            }
-                        }
-                        cmd=new NpgsqlCommand();
-                        cmd.Connection = conn;
-                        cmd.CommandText =
-                            "insert into market_realtimehistory (regionid,typeid,date,sell,buy,sellvol,buyvol) values" +
-                            " (@regionid,@typeid,@date,@sell,@buy,@sellvol,@buyvol);";
-                        cmd.Parameters.AddWithValue("typeid", typeid);
-                        cmd.Parameters.AddWithValue("regionid", u.Key);
-                        cmd.Parameters.AddWithValue("date", DateTime.Now);
-                        cmd.Parameters.AddWithValue("sell", sellprice);
-                        cmd.Parameters.AddWithValue("buy", buyprice);
-                        cmd.Parameters.AddWithValue("sellvol", sellvol);
-                        cmd.Parameters.AddWithValue("buyvol", buyvol);
-                        cmd.ExecuteNonQuery();
-
-                        cmd=new NpgsqlCommand();
-                        cmd.Connection = conn;
-                        cmd.CommandText =
-                            "select count(*) from market_markethistorybyday where date=@date and regionid=@regionid and typeid=@typeid;";
-                        cmd.Parameters.AddWithValue("date", DateTime.Today);
-                        cmd.Parameters.AddWithValue("typeid", typeid);
-                        cmd.Parameters.AddWithValue("regionid", u.Key);
-                        bool hasoldrecord = false;
-                        using (var reader = cmd.ExecuteReader())
-                        {
-                            while (reader.Read())
-                            {
-                                if (reader.GetInt32(0) > 0)
+                                while (reader.Read())
                                 {
-                                    hasoldrecord = true;
-                                    break;
+                                    buyprice = reader.IsDBNull(0) ? 0 : reader.GetDouble(0);
+                                    buyvol = reader.IsDBNull(1) ? 0 : reader.GetInt64(1);
+                                }
+
+                                reader.NextResult();
+                                while (reader.Read())
+                                {
+                                    sellprice = reader.IsDBNull(0) ? 0 : reader.GetDouble(0);
+                                    sellvol = reader.IsDBNull(1) ? 0 : reader.GetInt64(1);
                                 }
                             }
-                        }
-                        cmd=new NpgsqlCommand();
-                        cmd.Connection = conn;
-                        if (hasoldrecord)
-                        {
+                            cmd = new NpgsqlCommand();
+                            cmd.Connection = conn;
                             cmd.CommandText =
-                                "update market_markethistorybyday set min=LEAST(min,@cur),max=GREATEST(max,@cur),\"end\"=@cur where date=@date and regionid=@regionid and typeid=@typeid;";
-                           
-                        }
-                        else
-                        {
+                                "insert into market_realtimehistory (regionid,typeid,date,sell,buy,sellvol,buyvol) values" +
+                                " (@regionid,@typeid,@date,@sell,@buy,@sellvol,@buyvol);";
+                            cmd.Parameters.AddWithValue("typeid", typeid);
+                            cmd.Parameters.AddWithValue("regionid", u.Key);
+                            cmd.Parameters.AddWithValue("date", DateTime.Now);
+                            cmd.Parameters.AddWithValue("sell", sellprice);
+                            cmd.Parameters.AddWithValue("buy", buyprice);
+                            cmd.Parameters.AddWithValue("sellvol", sellvol);
+                            cmd.Parameters.AddWithValue("buyvol", buyvol);
+                            cmd.ExecuteNonQuery();
+
+                            cmd = new NpgsqlCommand();
+                            cmd.Connection = conn;
                             cmd.CommandText =
-                                "INSERT INTO market_markethistorybyday( date, min, max, start, \"end\", volume, regionid, typeid, \"order\") " +
-                                "VALUES ( @date, @cur, @cur, @cur, @cur, 0, @regionid, @typeid, 0);";
-                           
+                                "select count(*) from market_markethistorybyday where date=@date and regionid=@regionid and typeid=@typeid;";
+                            cmd.Parameters.AddWithValue("date", DateTime.Today);
+                            cmd.Parameters.AddWithValue("typeid", typeid);
+                            cmd.Parameters.AddWithValue("regionid", u.Key);
+                            bool hasoldrecord = false;
+                            using (var reader = cmd.ExecuteReader())
+                            {
+                                while (reader.Read())
+                                {
+                                    if (reader.GetInt32(0) > 0)
+                                    {
+                                        hasoldrecord = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            cmd = new NpgsqlCommand();
+                            cmd.Connection = conn;
+                            if (hasoldrecord)
+                            {
+                                cmd.CommandText =
+                                    "update market_markethistorybyday set min=LEAST(min,@cur),max=GREATEST(max,@cur),\"end\"=@cur where date=@date and regionid=@regionid and typeid=@typeid;";
+
+                            }
+                            else
+                            {
+                                cmd.CommandText =
+                                    "INSERT INTO market_markethistorybyday( date, min, max, start, \"end\", volume, regionid, typeid, \"order\") " +
+                                    "VALUES ( @date, @cur, @cur, @cur, @cur, 0, @regionid, @typeid, 0);";
+
+                            }
+                            cmd.Parameters.AddWithValue("cur", sellprice);
+                            cmd.Parameters.AddWithValue("date", DateTime.Today);
+                            cmd.Parameters.AddWithValue("typeid", typeid);
+                            cmd.Parameters.AddWithValue("regionid", u.Key);
+                            cmd.ExecuteNonQuery();
+
+
+
                         }
-                        cmd.Parameters.AddWithValue("cur", sellprice);
-                        cmd.Parameters.AddWithValue("date", DateTime.Today);
-                        cmd.Parameters.AddWithValue("typeid", typeid);
-                        cmd.Parameters.AddWithValue("regionid", u.Key);
-                        cmd.ExecuteNonQuery();
 
-
-
+                    }
+                    catch (Exception e)
+                    {
+                        exceptions.Enqueue(e);
                     }
 
                 });
             }
+            if (exceptions.Count > 0) throw new AggregateException(exceptions);
 
-            
         }
     }
 }

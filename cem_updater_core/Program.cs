@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -27,11 +28,13 @@ namespace cem_updater_core
         private static System.Timers.Timer _aTimer1 = new System.Timers.Timer(1000) {AutoReset = false};
         private static System.Timers.Timer _aTimer2 = new System.Timers.Timer(1000) {AutoReset = false};
         private static System.Timers.Timer _aTimer3 = new System.Timers.Timer(1000) {AutoReset = false};
+        private static System.Timers.Timer _aTimer4 = new System.Timers.Timer(1000) { AutoReset = false };
 
         private static System.Threading.ManualResetEvent _event1 = new ManualResetEvent(true);
         private static System.Threading.ManualResetEvent _event2 = new ManualResetEvent(true);
         private static System.Threading.ManualResetEvent _event3 = new ManualResetEvent(true);
-        private static WaitHandle[] events = {_event1, _event2, _event3};
+        private static System.Threading.ManualResetEvent _event4 = new ManualResetEvent(true);
+        private static WaitHandle[] events = {_event1, _event2, _event3, _event4};
 
         public static IConfiguration Configuration { get; set; }
 
@@ -113,17 +116,49 @@ namespace cem_updater_core
 
                 }
             };
-            _aTimer3.Elapsed += async (sender, ar) =>
+
+
+            _aTimer3.Elapsed += (sender, ar) =>
             {
                 _event3.Reset();
-                await GetStreamTQKM(cts.Token);
+                try
+                {
+                    Log("KM TQ Start");
+                    SyncKMTQ();
+                    Log("KM TQ Stop");
+                }
+                catch (Exception e)
+                {
+                    Log(e.ToString());
+                }
+
                 _event3.Set();
                 if (isServiceRunning)
                 {
+                    _aTimer3.Interval = 1 * 60 * 1000;
                     _aTimer3.Start();
 
                 }
             };
+
+            //            _aTimer3.Elapsed += async (sender, ar) =>
+            //            {
+            //                _event3.Reset();
+            //                try
+            //                {
+            //                    await GetStreamTQKM(cts.Token);
+            //                }
+            //                catch (Exception e)
+            //                {
+            //                    Log(e.ToString());
+            //                }
+            //                _event3.Set();
+            //                if (isServiceRunning)
+            //                {
+            //                    _aTimer3.Start();
+            //
+            //                }
+            //            };
 
             _aTimer1.Start();
             _aTimer2.Start();
@@ -155,6 +190,11 @@ namespace cem_updater_core
             }
         }
 
+        private static void SyncKMTQ()
+        {
+            throw new NotImplementedException();
+        }
+
         private static async Task GetZKBKM(CancellationToken ctsToken)
         {
             try
@@ -184,7 +224,8 @@ namespace cem_updater_core
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Exception: {0}", ex);
+                Log(ex.ToString());
+                
             }
            
             
@@ -319,21 +360,30 @@ namespace cem_updater_core
             }
 
             List<ESIMarketOrder> results = new List<ESIMarketOrder>();
+            var exceptions = new ConcurrentQueue<Exception>();
             Parallel.ForEach(Enumerable.Range(1, pages  ),
                 new ParallelOptions() { MaxDegreeOfParallelism = 10 },
                 pagenum =>
                 {
-                    var result = GetESIOrders(url + $"&page={pagenum}", lastModified);
-                    if (result != null)
+                    try
                     {
-                        lock (results)
+                        var result = GetESIOrders(url + $"&page={pagenum}", lastModified);
+                        if (result != null)
                         {
-                            results.AddRange(result);
+                            lock (results)
+                            {
+                                results.AddRange(result);
+                            }
                         }
+
                     }
+                    catch (Exception e)
+                    {
+                        exceptions.Enqueue(e);
+                    }
+                    
                 });
-
-
+            if (exceptions.Count > 0) throw new AggregateException(exceptions);
 
 
             return results;
