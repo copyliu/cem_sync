@@ -78,7 +78,7 @@ namespace cem_updater_core
                 try
                 {
                     Log("CN Start");
-                    SyncCN();
+                    SyncCN().Wait();
                     Log("CN Stop");
                 }
                 catch (Exception e)
@@ -100,7 +100,7 @@ namespace cem_updater_core
                 try
                 {
                     Log("TQ Start");
-                    SyncTQ();
+                    SyncTQ().Wait();
                     Log("TQ Stop");
                 }
                 catch (Exception e)
@@ -231,7 +231,7 @@ namespace cem_updater_core
             
         }
 
-        private static async void SyncTQ()
+        private static async Task SyncTQ()
         {
             var regions = DAL.Market.GetRegions(true);
             foreach (var region in regions)
@@ -416,7 +416,7 @@ namespace cem_updater_core
             return crestresult;
         }
 
-        private static async void SyncCN()
+        private static async Task SyncCN()
         {
             var regions = DAL.Market.GetRegions();
 
