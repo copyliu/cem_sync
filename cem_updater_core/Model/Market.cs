@@ -115,7 +115,10 @@ namespace cem_updater_core.Model
     {
         protected bool Equals(CrestOrder other)
         {
-            return buy == other.buy && issued.Equals(other.issued) && price.Equals(other.price) && volume == other.volume && duration == other.duration && id == other.id && minVolume == other.minVolume && volumeEntered == other.volumeEntered && string.Equals(range, other.range) && stationID == other.stationID && type == other.type;
+            return buy == other.buy && issued.Equals(other.issued) && price.Equals(other.price) &&
+                   volume == other.volume && duration == other.duration && id == other.id &&
+                   minVolume == other.minVolume && volumeEntered == other.volumeEntered &&
+                   string.Equals(range, other.range) && stationID == other.stationID && type == other.type;
         }
 
         public override bool Equals(object obj)

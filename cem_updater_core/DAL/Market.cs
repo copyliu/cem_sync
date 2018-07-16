@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using cem_updater_core.Model;
 using Npgsql;
+using NpgsqlTypes;
 
 namespace cem_updater_core.DAL
 {
@@ -174,11 +175,11 @@ namespace cem_updater_core.DAL
                         cmd.Parameters.Add(new NpgsqlParameter<int>("minvolume", model.minVolume));
                         cmd.Parameters.Add(new NpgsqlParameter<int>("volremain", model.volume));
                         cmd.Parameters.Add(new NpgsqlParameter<int>("volenter", model.volumeEntered));
-                        cmd.Parameters.Add(new NpgsqlParameter<DateTime>("issued", model.issued));
+                        cmd.Parameters.AddWithValue("issued", NpgsqlDbType.TimestampTz, model.issued);
                         cmd.Parameters.Add(new NpgsqlParameter<long>("interval", model.duration));
                         cmd.Parameters.Add(new NpgsqlParameter<int>("range", Helpers.ConvertRange(model.range)));
                         cmd.Parameters.Add(new NpgsqlParameter<int>("reportedby", 0));
-                        cmd.Parameters.Add(new NpgsqlParameter<DateTime>("reportedtime", DateTime.Now));
+                        cmd.Parameters.AddWithValue("reportedtime", NpgsqlDbType.TimestampTz, DateTime.Now);
                         cmd.Parameters.Add(new NpgsqlParameter<int>("source", 0));
                         cmd.ExecuteNonQuery();
                     }
@@ -232,11 +233,11 @@ namespace cem_updater_core.DAL
                         cmd.Parameters.Add(new NpgsqlParameter<int>("minvolume", model.minVolume));
                         cmd.Parameters.Add(new NpgsqlParameter<int>("volremain", model.volume));
                         cmd.Parameters.Add(new NpgsqlParameter<int>("volenter", model.volumeEntered));
-                        cmd.Parameters.Add(new NpgsqlParameter<DateTime>("issued", model.issued));
+                        cmd.Parameters.AddWithValue("issued", NpgsqlDbType.TimestampTz, model.issued);
                         cmd.Parameters.Add(new NpgsqlParameter<long>("interval", model.duration));
                         cmd.Parameters.Add(new NpgsqlParameter<int>("range", Helpers.ConvertRange(model.range)));
                         cmd.Parameters.Add(new NpgsqlParameter<int>("reportedby", 0));
-                        cmd.Parameters.Add(new NpgsqlParameter<DateTime>("reportedtime", DateTime.Now));
+                        cmd.Parameters.AddWithValue("reportedtime", NpgsqlDbType.TimestampTz, DateTime.Now);
                         cmd.Parameters.Add(new NpgsqlParameter<int>("source", 0));
                         cmd.ExecuteNonQuery();
                     }
