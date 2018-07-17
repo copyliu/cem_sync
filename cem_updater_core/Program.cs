@@ -352,6 +352,11 @@ namespace cem_updater_core
             int pages;
 
             var headresponse = Caches.httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, url)).Result;
+            if (!headresponse.IsSuccessStatusCode)
+            {
+                throw new Exception("Status Code:" + headresponse.StatusCode);
+            }
+
             var lastModified = headresponse.Content.Headers.LastModified;
             if (!headresponse.Headers.TryGetValues("x-pages", out var xPages) ||
                 !int.TryParse(xPages.FirstOrDefault(), out pages))
