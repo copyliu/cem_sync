@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 using cem_updater_core.Model;
@@ -33,7 +34,7 @@ namespace cem_updater_core.DAL
                                 {
                                     id = (long) reader["id"],
                                     regionid = (long) reader["regionid"],
-                                    systemid = (long) reader["systemid"],
+                                    systemid = Convert.IsDBNull( reader["systemid"]) ?null: (long?)reader["systemid"] ,
                                     stationid = (long) reader["stationid"],
                                     typeid = (int) reader["typeid"],
                                     bid = (int) reader["bid"],
@@ -62,10 +63,10 @@ namespace cem_updater_core.DAL
             return result;
 
         }
-        public static Dictionary<long, long>[] GetStations(bool tq=false)
+        public static Dictionary<long, int>[] GetStations(bool tq=false)
         {
-            var system=new Dictionary<long, long>();
-            var region = new Dictionary<long, long>();
+            var system=new Dictionary<long, int>();
+            var region = new Dictionary<long, int>();
             using (var conn = new NpgsqlConnection(Helpers.GetMarketConnString(tq)))
             {
                 conn.Open();
@@ -77,8 +78,8 @@ namespace cem_updater_core.DAL
                     {
                         while (reader.Read())
                         {
-                            system.Add(reader.GetInt64(0),reader.GetInt64(1));
-                            region.Add(reader.GetInt64(0),reader.GetInt64(2));
+                            system.Add(reader.GetInt64(0),(int)reader.GetInt64(1));
+                            region.Add(reader.GetInt64(0), (int)reader.GetInt64(2));
                         }
                     }
                 }
@@ -98,7 +99,7 @@ namespace cem_updater_core.DAL
                 using (var cmd = new NpgsqlCommand())
                 {
                     cmd.Connection = conn;
-                    cmd.CommandText = "select regionid FROM regions;";
+                    cmd.CommandText = "select regionid FROM regions order by regionid;";
                     using (var reader = cmd.ExecuteReader())
 
                     {
@@ -129,7 +130,9 @@ namespace cem_updater_core.DAL
                 volumeEntered = p.volume_total,
                 price = p.price,
                 buy = p.is_buy_order,
-                range = p.range
+                range = p.range,
+                systemid = p.system_id,
+                regionid=p.regionid
             }).ToList();
             var cupdatelist = updatelist.AsParallel().Select(p => new CrestOrder()
             {
@@ -143,7 +146,9 @@ namespace cem_updater_core.DAL
                 volumeEntered = p.volume_total,
                 price = p.price,
                 buy = p.is_buy_order,
-                range = p.range
+                range = p.range,
+                systemid = p.system_id,
+                regionid = p.regionid
             }).ToList();
             UpdateDatabase(cnewlist,cupdatelist,deletelist,updatedtypelist,tq);
 
@@ -165,8 +170,11 @@ namespace cem_updater_core.DAL
                         cmd.CommandText =
                             @"insert into current_market  (regionid,systemid,stationid,typeid,bid,price,orderid,minvolume,volremain,volenter,issued,interval,range,reportedby,reportedtime,source) 
                                     VALUES (@regionid,@systemid,@stationid,@typeid,@bid,@price,@orderid,@minvolume,@volremain,@volenter,@issued,@interval,@range,@reportedby,@reportedtime,@source)";
-                        cmd.Parameters.Add(new NpgsqlParameter<long>("regionid", Caches.GetStationRegionDict(tq)[model.stationID]));
-                        cmd.Parameters.Add(new NpgsqlParameter<long>("systemid", Caches.GetStationSystemDict(tq)[model.stationID]));
+                        cmd.Parameters.Add(new NpgsqlParameter<long>("regionid", model.regionid));
+                        cmd.Parameters.Add(model.systemid.HasValue
+                            ? new NpgsqlParameter<long>("systemid", model.systemid.Value)
+                            : new NpgsqlParameter("systemid", DBNull.Value));
+
                         cmd.Parameters.Add(new NpgsqlParameter<long>("stationid", model.stationID));
                         cmd.Parameters.Add(new NpgsqlParameter<long>("typeid", model.type));
                         cmd.Parameters.Add(new NpgsqlParameter<long>("bid", model.buy ? 1 : 0));
@@ -223,8 +231,11 @@ namespace cem_updater_core.DAL
                                 @reportedtime
                                 ) where orderid=@orderid
                                 ";
-                        cmd.Parameters.Add(new NpgsqlParameter<long>("regionid", Caches.GetStationRegionDict(tq)[model.stationID]));
-                        cmd.Parameters.Add(new NpgsqlParameter<long>("systemid", Caches.GetStationSystemDict(tq)[model.stationID]));
+                        cmd.Parameters.Add(new NpgsqlParameter<long>("regionid", model.regionid));
+                        cmd.Parameters.Add(model.systemid.HasValue
+                            ? new NpgsqlParameter<long>("systemid", model.systemid.Value)
+                            : new NpgsqlParameter("systemid", DBNull.Value));
+
                         cmd.Parameters.Add(new NpgsqlParameter<long>("stationid", model.stationID));
                         cmd.Parameters.Add(new NpgsqlParameter<long>("typeid", model.type));
                         cmd.Parameters.Add(new NpgsqlParameter<long>("bid", model.buy ? 1 : 0));

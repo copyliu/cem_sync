@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using cem_updater_core.DAL;
+using Newtonsoft.Json;
 
 namespace cem_updater_core.Model
 {
@@ -52,6 +53,8 @@ namespace cem_updater_core.Model
         public int duration;
         public System.DateTime issued;
         public string range;
+        [JsonIgnore] public int regionid;
+
         public static bool operator ==(ESIMarketOrder order, CurrentMarket model)
         {
             if (ReferenceEquals(order, null) && ReferenceEquals(model, null)) return true;
@@ -94,7 +97,7 @@ namespace cem_updater_core.Model
     {
         public long id;
         public long regionid;
-        public long systemid;
+        public long? systemid;
         public long stationid;
         public int typeid;
         public int bid;
@@ -159,7 +162,9 @@ namespace cem_updater_core.Model
         public string range;
         public long stationID;
         public int type;
-      
+
+        [JsonIgnore] public int regionid;
+        [JsonIgnore] public int? systemid;
 
         public static bool operator ==(CrestOrder order, CurrentMarket model)
         {

@@ -10,10 +10,10 @@ namespace cem_updater_core
     {
         private static DateTime _lastCache=new DateTime(2000,1,1);
         private static object _lock=new object();
-        private static Dictionary<long, long> _stationSystemDictCn;
-        private static Dictionary<long, long> _stationRegionDictCn;
+        private static Dictionary<long, int> _stationSystemDictCn;
+        private static Dictionary<long, int> _stationRegionDictCn;
 
-        private static Dictionary<long, long> StationSystemDictCn
+        private static Dictionary<long, int> StationSystemDictCn
         {
             get
             {
@@ -26,7 +26,7 @@ namespace cem_updater_core
             }
         }
 
-        private static Dictionary<long, long> StationRegionDictCn    
+        private static Dictionary<long, int> StationRegionDictCn    
         {
             get
             {
@@ -58,11 +58,11 @@ namespace cem_updater_core
         }
 
 
-        private static Dictionary<long, long> _stationSystemDictTq;
-        private static Dictionary<long, long> _stationRegionDictTq;
+        private static Dictionary<long, int> _stationSystemDictTq;
+        private static Dictionary<long, int> _stationRegionDictTq;
         private static HttpClient _httpClient;
 
-        private static Dictionary<long, long> StationSystemDictTq
+        private static Dictionary<long, int> StationSystemDictTq
         {
             get
             {
@@ -75,7 +75,7 @@ namespace cem_updater_core
             }
         }
 
-        private static Dictionary<long, long> StationRegionDictTq
+        private static Dictionary<long, int> StationRegionDictTq
         {
             get
             {
@@ -92,11 +92,11 @@ namespace cem_updater_core
 
         public static HttpClient httpClient => _httpClient ?? (_httpClient = new HttpClient(new HttpClientHandler(){AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate}));
 
-        public static Dictionary<long, long> GetStationRegionDict(bool tq=false)
+        public static Dictionary<long, int> GetStationRegionDict(bool tq=false)
         {
             return tq ? StationRegionDictTq : StationRegionDictCn;
         }
-        public static Dictionary<long, long> GetStationSystemDict(bool tq = false)
+        public static Dictionary<long, int> GetStationSystemDict(bool tq = false)
         {
             return tq ? StationSystemDictTq : StationSystemDictCn;
         }
