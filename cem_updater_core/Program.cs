@@ -60,6 +60,11 @@ namespace cem_updater_core
                 .AddJsonFile("appsettings.json");
             Configuration = builder.Build();
 
+            if (!string.IsNullOrEmpty(Configuration["ua"]))
+            {
+                Caches.httpClient.DefaultRequestHeaders.Add("User-Agent", Configuration["ua"].Trim());
+            }
+
             DAL.Helpers.connectionstring_market_cn = Configuration["cndb"];
             DAL.Helpers.connectionstring_market_tq = Configuration["tqdb"];
 

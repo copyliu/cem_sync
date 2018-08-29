@@ -90,7 +90,10 @@ namespace cem_updater_core
         }
 
 
-        public static HttpClient httpClient => _httpClient ?? (_httpClient = new HttpClient(new HttpClientHandler(){AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate}));
+        public static HttpClient httpClient => _httpClient ?? (_httpClient = new HttpClient(new HttpClientHandler()
+        {
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+        }));
 
         public static Dictionary<long, int> GetStationRegionDict(bool tq=false)
         {
