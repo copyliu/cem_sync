@@ -447,60 +447,48 @@ namespace cem_updater_core
 
 
             Log(url);
-            int pages;
-            List<Esi_war_kms> results = new List<Esi_war_kms>();
-            var httpResponse = Caches.httpClient.GetAsync(url).Result;
-
-            if (!httpResponse.IsSuccessStatusCode)
+            var headresponse = Caches.httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, url)).Result;
+            if (!headresponse.IsSuccessStatusCode)
             {
-                throw new HttpRequestException(httpResponse.StatusCode.ToString());
+                throw new Exception("Status Code:" + headresponse.StatusCode);
             }
-
-
-            if (!httpResponse.Headers.TryGetValues("x-pages", out var xPages) ||
+            int pages;
+            if (!headresponse.Headers.TryGetValues("x-pages", out var xPages) ||
                 !int.TryParse(xPages.FirstOrDefault(), out pages))
             {
                 pages = 1;
             }
 
-
-            using (var s = httpResponse.Content.ReadAsStreamAsync().Result)
-            {
-
-
-                using (StreamReader sr = new StreamReader(s))
+            List<Esi_war_kms> results = new List<Esi_war_kms>();
+            var exceptions = new ConcurrentQueue<Exception>();
+            Parallel.ForEach(Enumerable.Range(1, pages),
+                new ParallelOptions() { MaxDegreeOfParallelism = 10 },
+                pagenum =>
                 {
-                    using (JsonReader reader = new JsonTextReader(sr))
+                    try
                     {
-                        JsonSerializer serializer = new JsonSerializer();
-                        var kmresult = serializer.Deserialize<List<Esi_war_kms>>(reader);
-                        if (kmresult != null)
+                        var result = GetESIKM(url + $"?page={pagenum}");
+                        if (result != null)
                         {
-                            results.AddRange(kmresult);
-                        }
-                    }
-                }
-
-                if (pages > 1)
-                {
-                    Parallel.ForEach(Enumerable.Range(2, pages - 2 + 1),
-                        new ParallelOptions() {MaxDegreeOfParallelism = 10},
-                        pagenum =>
-                        {
-                            var result = GetESIKM(url + $"?page={pagenum}");
-                            if (result != null)
+                            lock (results)
                             {
-                                lock (results)
-                                {
-                                    results.AddRange(result);
-                                }
+                                results.AddRange(result);
                             }
-                        });
-                }
+                        }
 
-            }
+                    }
+                    catch (Exception e)
+                    {
+                        exceptions.Enqueue(e);
+                    }
+
+                });
+            if (exceptions.Count > 0) throw new AggregateException(exceptions);
+
 
             return results;
+
+
 
 
 
