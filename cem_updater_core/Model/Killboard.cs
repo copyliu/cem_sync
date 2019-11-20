@@ -6,22 +6,22 @@ namespace cem_updater_core.Model
 {
     public class RedisQ
     {
-        public PizzaKM package;
+        public PizzaKM package { get; set; }
     }
     public class PizzaKM
     {
-        public int killID;
+        public int killID { get; set; }
         public class PizzaZkb
         {
-            public string hash;
+            public string hash { get; set; }
         }
 
-        public PizzaZkb zkb;
+        public PizzaZkb zkb { get; set; }
     }
     public class Esi_war_kms
     {
-        public int killmail_id;
-        public string killmail_hash;
+        public int killmail_id { get; set; }
+        public string killmail_hash { get; set; }
     }
 
     public  class Kb_waiting_api

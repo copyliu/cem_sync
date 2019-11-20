@@ -8,14 +8,14 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
 using cem_updater_core.DAL;
 using cem_updater_core.Model;
+using Dasync.Collections;
 using Microsoft.Extensions.Configuration;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using Npgsql;
 using Npgsql.Logging;
 
@@ -28,7 +28,7 @@ namespace cem_updater_core
         private static System.Timers.Timer _aTimer1 = new System.Timers.Timer(1000) {AutoReset = false};
         private static System.Timers.Timer _aTimer2 = new System.Timers.Timer(1000) {AutoReset = false};
         private static System.Timers.Timer _aTimer3 = new System.Timers.Timer(1000) {AutoReset = false};
-        private static System.Timers.Timer _aTimer4 = new System.Timers.Timer(1000) { AutoReset = false };
+        private static System.Timers.Timer _aTimer4 = new System.Timers.Timer(1000) {AutoReset = false};
 
         private static System.Threading.ManualResetEvent _event1 = new ManualResetEvent(true);
         private static System.Threading.ManualResetEvent _event2 = new ManualResetEvent(true);
@@ -204,24 +204,24 @@ namespace cem_updater_core
         {
             try
             {
-                var response =await Caches.httpClient.GetAsync("https://redisq.zkillboard.com/listen.php?queueID=ceve-market.org&ttw=5",
-                    ctsToken);
-                using (StreamReader sr = new StreamReader(await response.Content.ReadAsStreamAsync()))
+                var req = Caches.httpClient.GetStreamAsync(
+                    "https://redisq.zkillboard.com/listen.php?queueID=ceve-market.org&ttw=5");
+
+
+                var crestresult = await
+                    System.Text.Json.JsonSerializer.DeserializeAsync<RedisQ>(
+                        await req, null, ctsToken);
+                if (crestresult != null && crestresult.package != null)
                 {
-                    using (JsonReader reader = new JsonTextReader(sr))
-                    {
-                        JsonSerializer serializer = new JsonSerializer();
-                        var crestresult = serializer.Deserialize<RedisQ>(reader);
-                        if (crestresult != null && crestresult.package!=null)
-                        {
-                            Log($"TQ NEW KM: {crestresult.package.killID}/{crestresult.package.zkb?.hash}");
-                            DAL.KillBoard.AddWaiting(
-                                new Kb_waiting_api() { killID = crestresult.package.killID, hash = crestresult.package.zkb?.hash },
-                                tq: true);
-                        }
-                    }
+                    Log($"TQ NEW KM: {crestresult.package.killID}/{crestresult.package.zkb?.hash}");
+                    DAL.KillBoard.AddWaiting(
+                        new Kb_waiting_api()
+                            {killID = crestresult.package.killID, hash = crestresult.package.zkb?.hash},
+                        tq: true);
                 }
-               
+
+
+
 
             }
             catch (OperationCanceledException)
@@ -230,25 +230,24 @@ namespace cem_updater_core
             catch (Exception ex)
             {
                 Log(ex.ToString());
-                
+
             }
-           
-            
+
+
         }
 
-        private static async Task SyncESI(bool istq=false)
+        private static async Task SyncESI(bool istq = false)
         {
-            var regions = DAL.Market.GetRegions(istq);
+            var regions = await DAL.Market.GetRegions(istq);
             foreach (var region in regions)
             {
-                
-           
-                var oldorderstask = DAL.Market.GetCurrentMarkets(region, istq);
+
+
 
                 List<ESIMarketOrder> orders;
                 try
                 {
-                    orders = GetESIOrders(region, istq).Distinct().ToList();
+                    orders = (await GetESIOrders(region, istq)).Distinct().ToList();
                 }
                 catch (WrongMarketSnapShotException e)
                 {
@@ -261,7 +260,7 @@ namespace cem_updater_core
                     continue;
                 }
 
-                var oldorders = await oldorderstask;
+                var oldorders = await DAL.Market.GetCurrentMarkets(region, istq);
                 var oldlist = oldorders.GroupBy(p => p.orderid).ToDictionary(g => g.Key, g => g.First());
                 var oldorderids = oldorders.Select(p => p.orderid).ToHashSet();
 
@@ -333,7 +332,7 @@ namespace cem_updater_core
                 }
 
                 Log($"RegionID {region}:new:{newlist.Count},update:{updatelist.Count},del:{deletelist.Count}");
-                DAL.Market.UpdateDatabase(newlist, updatelist, deletelist, updatedtypes, istq);
+                await DAL.Market.UpdateDatabaseAsync(newlist, updatelist, deletelist, updatedtypes, istq);
 
 
 
@@ -341,10 +340,10 @@ namespace cem_updater_core
 
             }
 
-           
+
         }
 
-        private static List<ESIMarketOrder> GetESIOrders(int regionid,  bool tq = false)
+        private static async Task<List<ESIMarketOrder>> GetESIOrders(int regionid, bool tq = false)
         {
             string url;
             if (tq)
@@ -359,7 +358,7 @@ namespace cem_updater_core
             Log(url);
             int pages;
 
-            var headresponse = Caches.httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, url)).Result;
+            var headresponse = await Caches.httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, url));
             if (!headresponse.IsSuccessStatusCode)
             {
                 throw new Exception("Status Code:" + headresponse.StatusCode);
@@ -372,67 +371,55 @@ namespace cem_updater_core
                 pages = 1;
             }
 
-            List<ESIMarketOrder> results = new List<ESIMarketOrder>();
-            var exceptions = new ConcurrentQueue<Exception>();
-            Parallel.ForEach(Enumerable.Range(1, pages  ),
-                new ParallelOptions() { MaxDegreeOfParallelism = 10 },
-                pagenum =>
+            ConcurrentBag<ESIMarketOrder> results = new ConcurrentBag<ESIMarketOrder>();
+
+
+            await Enumerable.Range(1, pages).ParallelForEachAsync(async pagenum =>
+            {
+
+                var result = await GetESIOrders(url + $"&page={pagenum}", lastModified);
+                if (result != null)
                 {
-                    try
+                    foreach (var v in result)
                     {
-                        var result = GetESIOrders(url + $"&page={pagenum}", lastModified);
-                        if (result != null)
-                        {
-                            lock (results)
-                            {
-                                results.AddRange(result);
-                            }
-                        }
-
+                        results.Add(v);
                     }
-                    catch (Exception e)
-                    {
-                        exceptions.Enqueue(e);
-                    }
-                    
-                });
-            if (exceptions.Count > 0) throw new AggregateException(exceptions);
+
+                }
 
 
-            return results;
+
+            }, 10);
+
+
+
+            return results.ToList();
         }
 
-        private static List<ESIMarketOrder> GetESIOrders(string url, DateTimeOffset? lastmod=null)
+        private static async Task<List<ESIMarketOrder>> GetESIOrders(string url, DateTimeOffset? lastmod = null)
         {
             Log(url);
 
-            List<ESIMarketOrder> crestresult;
-            var message = Caches.httpClient.GetAsync(url).Result;
+            var message = await Caches.httpClient.GetAsync(url);
             if (message.Content.Headers.LastModified != lastmod)
             {
                 throw new WrongMarketSnapShotException(lastmod, message.Content.Headers.LastModified);
-                
-            }
-            
-            using (var s = message.Content.ReadAsStreamAsync().Result)
-            {
-                using (StreamReader sr = new StreamReader(s))
-                {
-                    using (JsonReader reader = new JsonTextReader(sr))
-                    {
-                        JsonSerializer serializer = new JsonSerializer();
-                        crestresult = serializer.Deserialize<List<ESIMarketOrder>>(reader);
-                    }
-                }
+
             }
 
-            return crestresult;
+
+
+            return await JsonSerializer.DeserializeAsync<List<ESIMarketOrder>>(
+                await message.Content.ReadAsStreamAsync());
+
+
+
         }
 
 
 
 
-        private static List<Esi_war_kms> EsiGetWarsKM(int war, bool tq = false)
+        private static async Task<List<Esi_war_kms>> EsiGetWarsKM(int war, bool tq = false)
         {
             string url;
             if (tq)
@@ -447,11 +434,12 @@ namespace cem_updater_core
 
 
             Log(url);
-            var headresponse = Caches.httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, url)).Result;
+            var headresponse = await Caches.httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, url));
             if (!headresponse.IsSuccessStatusCode)
             {
                 throw new Exception("Status Code:" + headresponse.StatusCode);
             }
+
             int pages;
             if (!headresponse.Headers.TryGetValues("x-pages", out var xPages) ||
                 !int.TryParse(xPages.FirstOrDefault(), out pages))
@@ -459,34 +447,28 @@ namespace cem_updater_core
                 pages = 1;
             }
 
-            List<Esi_war_kms> results = new List<Esi_war_kms>();
-            var exceptions = new ConcurrentQueue<Exception>();
-            Parallel.ForEach(Enumerable.Range(1, pages),
-                new ParallelOptions() { MaxDegreeOfParallelism = 10 },
-                pagenum =>
+            ConcurrentBag<Esi_war_kms> results = new ConcurrentBag<Esi_war_kms>();
+
+            await Enumerable.Range(1, pages).ParallelForEachAsync(async pagenum =>
+            {
+
+                var result = await GetESIKM(url + $"?page={pagenum}");
+                if (result != null)
                 {
-                    try
+                    foreach (var esiWarKmse in result)
                     {
-                        var result = GetESIKM(url + $"?page={pagenum}");
-                        if (result != null)
-                        {
-                            lock (results)
-                            {
-                                results.AddRange(result);
-                            }
-                        }
-
-                    }
-                    catch (Exception e)
-                    {
-                        exceptions.Enqueue(e);
+                        results.Add(esiWarKmse);
                     }
 
-                });
-            if (exceptions.Count > 0) throw new AggregateException(exceptions);
+                }
 
 
-            return results;
+
+
+            }, 10);
+
+
+            return results.ToList();
 
 
 
@@ -494,27 +476,20 @@ namespace cem_updater_core
 
         }
 
-        private static List<Esi_war_kms> GetESIKM(string url)
+        private static async Task<List<Esi_war_kms>> GetESIKM(string url)
         {
             Log(url);
 
-            List<Esi_war_kms> crestresult;
-            using (var s = Caches.httpClient.GetStreamAsync(url).Result)
-            {
-                using (StreamReader sr = new StreamReader(s))
-                {
-                    using (JsonReader reader = new JsonTextReader(sr))
-                    {
-                        JsonSerializer serializer = new JsonSerializer();
-                        crestresult = serializer.Deserialize<List<Esi_war_kms>>(reader);
-                    }
-                }
-            }
 
-            return crestresult;
+
+
+            return await JsonSerializer.DeserializeAsync<List<Esi_war_kms>>(
+                await Caches.httpClient.GetStreamAsync(url));
+
+
         }
 
-        private static void UpdateWars(bool tq = false)
+        private static async Task UpdateWars(bool tq = false)
         {
             string url;
             if (tq)
@@ -527,109 +502,44 @@ namespace cem_updater_core
             }
 
             List<int> warlist;
-            using (var s = Caches.httpClient.GetStreamAsync(url + "/v1/wars/").Result)
+
+            warlist = JsonSerializer
+                .DeserializeAsync<List<int>>(Caches.httpClient.GetStreamAsync(url + "/v1/wars/").Result).Result;
+
+
+
+            var dbwars = await DAL.KillBoard.GetWarStatus(tq);
+
+
+            await Enumerable.Range(1, warlist.Max()).ParallelForEachAsync(async war =>
             {
-                using (StreamReader sr = new StreamReader(s))
+                if (dbwars.ContainsKey(war) && dbwars[war][0] == 1)
                 {
-                    using (JsonReader reader = new JsonTextReader(sr))
-                    {
-                        JsonSerializer serializer = new JsonSerializer();
-                        warlist = serializer.Deserialize<List<int>>(reader);
-                    }
+                    return;
                 }
-            }
 
-            var dbwars = DAL.KillBoard.GetWarStatus(tq);
+                List<Esi_war_kms> kmlist = await EsiGetWarsKM(war, tq);
 
-            Parallel.ForEach(Enumerable.Range(1, warlist.Max()), new ParallelOptions() {MaxDegreeOfParallelism = 10},
-                war =>
+                await DAL.KillBoard.AddWaiting(kmlist.Where(p => p.killmail_id > dbwars[war][1]).ToList(), tq);
+
+            }, 10);
+
+            await Enumerable.Range(1, warlist.Max()).ParallelForEachAsync(
+                async war =>
                 {
                     if (dbwars.ContainsKey(war) && dbwars[war][0] == 1)
                     {
                         return;
                     }
 
-                    List<Esi_war_kms> kmlist = EsiGetWarsKM(war, tq);
+                    List<Esi_war_kms> kmlist = await EsiGetWarsKM(war, tq);
 
-                    DAL.KillBoard.AddWaiting(kmlist.Where(p => p.killmail_id > dbwars[war][1]).ToList(), tq);
+                    await DAL.KillBoard.AddWaiting(kmlist.Where(p => p.killmail_id > dbwars[war][1]).ToList(), tq);
 
-                });
+                }, 10);
         }
 
 
-        public static async Task GetStreamTQKM(CancellationToken cancellationToken)
-        {
-            using (ClientWebSocket webSocket = new ClientWebSocket())
-            {
-                try
-                {
-
-                    await webSocket.ConnectAsync(new Uri("wss://api.pizza.moe/stream/killmails/"), cancellationToken);
-                    await Task.WhenAll(Receive(webSocket, cancellationToken));
-                }
-                catch (OperationCanceledException)
-                {
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("Exception: {0}", ex);
-                }
-                finally
-                {
-                    webSocket?.Dispose();
-                }
-            }
-
-
-        }
-
-        private static async Task Receive(ClientWebSocket webSocket, CancellationToken cancellationToken)
-        {
-            var buffer = new byte[1000];
-            var offset = 0;
-            var free = buffer.Length;
-            byte[] fullbuffer;
-            while (webSocket.State == WebSocketState.Open)
-            {
-                var result =
-                    await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer, offset, free), cancellationToken);
-                if (result.MessageType == WebSocketMessageType.Close)
-                {
-                    await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, cancellationToken);
-                }
-
-                fullbuffer = new byte[result.Count];
-                Array.Copy(buffer, fullbuffer, result.Count);
-
-
-                while (!result.EndOfMessage)
-                {
-                    result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer, offset, free),
-                        cancellationToken);
-                    var tmp = new byte[fullbuffer.Length + result.Count];
-                    Buffer.BlockCopy(fullbuffer, 0, tmp, 0, fullbuffer.Length);
-                    Buffer.BlockCopy(buffer, 0, tmp, fullbuffer.Length, result.Count);
-                    fullbuffer = tmp;
-                }
-
-                using (StreamReader sr = new StreamReader(new MemoryStream(fullbuffer)))
-                {
-                    using (JsonReader reader = new JsonTextReader(sr))
-                    {
-                        JsonSerializer serializer = new JsonSerializer();
-                        var crestresult = serializer.Deserialize<PizzaKM>(reader);
-                        if (crestresult != null)
-                        {
-                            Log($"TQ NEW KM: {crestresult.killID}/{crestresult.zkb?.hash}");
-                            DAL.KillBoard.AddWaiting(
-                                new Kb_waiting_api() {killID = crestresult.killID, hash = crestresult.zkb?.hash},
-                                tq: true);
-                        }
-                    }
-                }
-
-            }
-        }
 
 
     }

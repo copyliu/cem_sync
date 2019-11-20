@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using cem_updater_core.DAL;
-using Newtonsoft.Json;
 
 namespace cem_updater_core.Model
 {
@@ -41,19 +41,19 @@ namespace cem_updater_core.Model
             }
         }
 
-        public long order_id;
-        public int type_id;
-        public long location_id;
-        public int system_id;
-        public int volume_total;
-        public int volume_remain;
-        public int min_volume;
-        public double price;
-        public bool is_buy_order;
-        public int duration;
-        public System.DateTime issued;
-        public string range;
-        [JsonIgnore] public int regionid;
+        public long order_id { get; set; }
+        public int type_id { get; set; }
+        public long location_id { get; set; }
+        public int system_id { get; set; }
+        public int volume_total { get; set; }
+        public int volume_remain { get; set; }
+        public int min_volume { get; set; }
+        public double price { get; set; }
+        public bool is_buy_order { get; set; }
+        public int duration { get; set; }
+        public System.DateTime issued { get; set; }
+        public string range { get; set; }
+        [JsonIgnore] public int regionid { get; set; }
 
         public static bool operator ==(ESIMarketOrder order, CurrentMarket model)
         {
@@ -151,20 +151,20 @@ namespace cem_updater_core.Model
             }
         }
 
-        public bool buy;
-        public DateTime issued;
-        public double price;
-        public int volume;
-        public int duration;
-        public long id;
-        public int minVolume;
-        public int volumeEntered;
-        public string range;
-        public long stationID;
-        public int type;
+        public bool buy { get; set; }
+        public DateTime issued { get; set; }
+        public double price { get; set; }
+        public int volume { get; set; }
+        public int duration { get; set; }
+        public long id { get; set; }
+        public int minVolume { get; set; }
+        public int volumeEntered { get; set; }
+        public string range { get; set; }
+        public long stationID { get; set; }
+        public int type { get; set; }
 
-        [JsonIgnore] public int regionid;
-        [JsonIgnore] public int? systemid;
+        [JsonIgnore] public int regionid { get; set; }
+        [JsonIgnore] public int? systemid { get; set; }
 
         public static bool operator ==(CrestOrder order, CurrentMarket model)
         {
