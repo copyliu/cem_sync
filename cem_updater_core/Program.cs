@@ -214,7 +214,7 @@ namespace cem_updater_core
                 if (crestresult != null && crestresult.package != null)
                 {
                     Log($"TQ NEW KM: {crestresult.package.killID}/{crestresult.package.zkb?.hash}");
-                    DAL.KillBoard.AddWaiting(
+                    await DAL.KillBoard.AddWaiting(
                         new Kb_waiting_api()
                             {killID = crestresult.package.killID, hash = crestresult.package.zkb?.hash},
                         tq: true);
