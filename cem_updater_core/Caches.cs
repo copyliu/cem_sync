@@ -3,9 +3,29 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace cem_updater_core
 {
+    public class Utils
+    {
+        public class ForceHttp2Handler : DelegatingHandler
+        {
+            public ForceHttp2Handler(HttpMessageHandler innerHandler)
+                : base(innerHandler)
+            {
+            }
+
+            protected override Task<HttpResponseMessage> SendAsync(
+                HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                request.Version = HttpVersion.Version20;
+                return base.SendAsync(request, cancellationToken);
+            }
+        }
+    }
+
     public  class Caches
     {
         private static DateTime _lastCache=new DateTime(2000,1,1);
@@ -90,9 +110,11 @@ namespace cem_updater_core
         }
 
 
-        public static HttpClient httpClient => _httpClient ?? (_httpClient = new HttpClient(new HttpClientHandler()
+        public static HttpClient httpClient => _httpClient ??= new HttpClient(new Utils.ForceHttp2Handler(new SocketsHttpHandler()
         {
-            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+            
+
         }));
 
         public static Dictionary<long, int> GetStationRegionDict(bool tq=false)
