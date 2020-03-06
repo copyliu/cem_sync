@@ -20,7 +20,7 @@ namespace cem_updater_core
             protected override Task<HttpResponseMessage> SendAsync(
                 HttpRequestMessage request, CancellationToken cancellationToken)
             {
-                request.Version = HttpVersion.Version20;
+                // request.Version = HttpVersion.Version20;
                 return base.SendAsync(request, cancellationToken);
             }
         }

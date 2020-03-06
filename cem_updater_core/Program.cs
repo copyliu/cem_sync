@@ -332,7 +332,7 @@ namespace cem_updater_core
                 }
 
                 Log($"RegionID {region}:new:{newlist.Count},update:{updatelist.Count},del:{deletelist.Count}");
-                await DAL.Market.UpdateDatabaseAsync(newlist, updatelist, deletelist, updatedtypes, istq);
+                await DAL.Market.UpdateDatabaseAsync(newlist, updatelist, deletelist, updatedtypes, region, istq);
 
 
 
