@@ -309,7 +309,7 @@ namespace cem_updater_core.DAL
                         await reader.NextResultAsync();
                         while (await reader.ReadAsync())
                         {
-                            buyprice[reader.GetInt32(0)] = reader.IsDBNull(1) ? 0 : reader.GetDouble(1);
+                            sellprice[reader.GetInt32(0)] = reader.IsDBNull(1) ? 0 : reader.GetDouble(1);
 
                             buyvol[reader.GetInt32(0)] = reader.IsDBNull(2) ? 0 : reader.GetInt64(2);
                         }
