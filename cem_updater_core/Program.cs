@@ -24,17 +24,7 @@ namespace cem_updater_core
     class Program
     {
         private static readonly object _log_locker = new object();
-        private static bool isServiceRunning = false;
-        private static System.Timers.Timer _aTimer1 = new System.Timers.Timer(1000) {AutoReset = false};
-        private static System.Timers.Timer _aTimer2 = new System.Timers.Timer(1000) {AutoReset = false};
-        private static System.Timers.Timer _aTimer3 = new System.Timers.Timer(1000) {AutoReset = false};
-        private static System.Timers.Timer _aTimer4 = new System.Timers.Timer(1000) {AutoReset = false};
 
-        private static System.Threading.ManualResetEvent _event1 = new ManualResetEvent(true);
-        private static System.Threading.ManualResetEvent _event2 = new ManualResetEvent(true);
-        private static System.Threading.ManualResetEvent _event3 = new ManualResetEvent(true);
-        private static System.Threading.ManualResetEvent _event4 = new ManualResetEvent(true);
-        private static WaitHandle[] events = {_event1, _event2, _event3, _event4};
 
         public static IConfiguration Configuration { get; set; }
 
@@ -53,7 +43,7 @@ namespace cem_updater_core
 
         }
 
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
             var builder = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
@@ -75,117 +65,67 @@ namespace cem_updater_core
 
 
             bool keepRunning = true;
-            isServiceRunning = true;
 
-            _aTimer1.Elapsed += (sender, ar) =>
+
+            var task1 = Task.Run(async () =>
             {
-                _event1.Reset();
-                try
+                while (!cts.IsCancellationRequested)
                 {
-                    Log("CN Start");
-                    SyncESI(false).Wait();
-                    Log("CN Stop");
-                }
-                catch (Exception e)
-                {
-                    Log(e.ToString());
+                    var timer = Task.Delay(TimeSpan.FromMinutes(5),cts.Token);
+                    try
+                    {
+                        Log("CN Start");
+                        await SyncESI(false);
+                        Log("CN Stop");
+                    }
+                    catch (Exception e)
+                    {
+                        Log(e.ToString());
+                    }
+
+                    await timer;
                 }
 
-                _event1.Set();
-                if (isServiceRunning)
-                {
-                    _aTimer1.Interval = 5 * 60 * 1000;
-                    _aTimer1.Start();
 
-                }
-            };
-            _aTimer2.Elapsed += (sender, ar) =>
+            });
+            var task2 = Task.Run(async () =>
             {
-                _event2.Reset();
-                try
+                while (!cts.IsCancellationRequested)
                 {
-                    Log("TQ Start");
-                    SyncESI(true).Wait();
-                    Log("TQ Stop");
+                    var timer = Task.Delay(TimeSpan.FromMinutes(5), cts.Token);
+                    try
+                    {
+                        Log("TQ Start");
+                        await SyncESI(true);
+                        Log("TQ Stop");
+                    }
+                    catch (Exception e)
+                    {
+                        Log(e.ToString());
+                    }
+
+                    await timer;
                 }
-                catch (Exception e)
-                {
-                    Log(e.ToString());
-                }
-
-                _event2.Set();
-                if (isServiceRunning)
-                {
-                    _aTimer2.Interval = 5 * 60 * 1000;
-                    _aTimer2.Start();
-
-                }
-            };
 
 
-            _aTimer3.Elapsed += (sender, ar) =>
+            });
+     
+            var task3 = Task.Run(async () =>
             {
-                _event3.Reset();
-                try
-                {
-                    Log("KM TQ Start");
-                    SyncKMTQ();
-                    Log("KM TQ Stop");
-                }
-                catch (Exception e)
-                {
-                    Log(e.ToString());
-                }
-
-                _event3.Set();
-                if (isServiceRunning)
-                {
-                    _aTimer3.Interval = 1 * 60 * 1000;
-                    _aTimer3.Start();
-
-                }
-            };
-
-            //            _aTimer3.Elapsed += async (sender, ar) =>
-            //            {
-            //                _event3.Reset();
-            //                try
-            //                {
-            //                    await GetStreamTQKM(cts.Token);
-            //                }
-            //                catch (Exception e)
-            //                {
-            //                    Log(e.ToString());
-            //                }
-            //                _event3.Set();
-            //                if (isServiceRunning)
-            //                {
-            //                    _aTimer3.Start();
-            //
-            //                }
-            //            };
-
-//            _aTimer1.Start(); //國服開關 暫時關閉
-            _aTimer2.Start();
-//            _aTimer3.Start();
-
-            new Thread(async () =>
-            {
-                while (isServiceRunning)
+                while (!cts.IsCancellationRequested)
                 {
                     await GetZKBKM(cts.Token);
                 }
-            }).Start();
 
-            Console.CancelKeyPress += delegate
+
+            });
+
+
+            Console.CancelKeyPress +=  delegate
             {
                 Log("Shutting Down");
-                isServiceRunning = false;
-                _aTimer1.Stop();
-                _aTimer2.Stop();
-                _aTimer3.Stop();
                 cts.Cancel();
-                WaitHandle.WaitAll(events);
+                Task.WaitAll(task1,task2,task3);
                 Log("Exited!");
                 keepRunning = false;
             };
@@ -194,6 +134,10 @@ namespace cem_updater_core
                 Thread.Sleep(1000);
             }
         }
+
+
+
+
 
         private static void SyncKMTQ()
         {
@@ -330,8 +274,8 @@ namespace cem_updater_core
                         updatedtypes[oldorder.regionid].Add(typeid);
                     }
                 }
-
-                Log($"RegionID {region}:new:{newlist.Count},update:{updatelist.Count},del:{deletelist.Count}");
+                var servername=istq?"TQ":"CN";
+                Log($"{servername} RegionID {region}:new:{newlist.Count},update:{updatelist.Count},del:{deletelist.Count}");
                 await DAL.Market.UpdateDatabaseAsync(newlist, updatelist, deletelist, updatedtypes, region, istq);
 
 
@@ -389,7 +333,7 @@ namespace cem_updater_core
 
 
 
-            }, 10);
+            }, 30);
 
 
 

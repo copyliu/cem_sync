@@ -113,7 +113,11 @@ namespace cem_updater_core
         public static HttpClient httpClient => _httpClient ??= new HttpClient(new Utils.ForceHttp2Handler(new SocketsHttpHandler()
         {
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
-            
+         
+            PooledConnectionLifetime = TimeSpan.FromMinutes(10),
+            PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
+            MaxConnectionsPerServer = 50
+    
 
         }));
 
