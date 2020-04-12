@@ -10,12 +10,10 @@ namespace CEMSync.ESI
 
     public class ESITQService : ESIService
     {
-        private readonly HttpClient _http;
 
 
-        public ESITQService(ESIClient client, HttpClient http) : base(client)
+        public ESITQService(ESIClient client) : base(client)
         {
-            _http = http;
             _client.BaseUrl = "https://esi.evetech.net/latest/";
         }
 
