@@ -50,13 +50,6 @@ namespace CEMSync.Service
                         options.UseNpgsql(hostContext.Configuration.GetConnectionString("TQKillboardDB"), builder => builder.UseNodaTime()));
 
 
-                    services.AddLogging(loggingBuilder =>
-                    {
-                        loggingBuilder.ClearProviders();
-                        loggingBuilder.SetMinimumLevel(LogLevel.Trace);
-                        loggingBuilder.AddNLog(new NLogLoggingConfiguration(hostContext.Configuration.GetSection("NLog")));
-                    });
-
 
                     if (args.Contains("--bootstrap"))
                     {
@@ -86,6 +79,14 @@ namespace CEMSync.Service
                             .HandleTransientHttpError()
                             .WaitAndRetryAsync(6, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)) + TimeSpan.FromMilliseconds(jitterer.Next(0, 500)));
                     });
+
+                    services.AddLogging(loggingBuilder =>
+                    {
+                        loggingBuilder.ClearProviders();
+                        loggingBuilder.SetMinimumLevel(LogLevel.Trace);
+                        loggingBuilder.AddNLog(new NLogLoggingConfiguration(hostContext.Configuration.GetSection("NLog")));
+                    });
+
                 });
             
             await builder.RunConsoleAsync();

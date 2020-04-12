@@ -93,28 +93,40 @@ namespace CEMSync.Service.EVEMaps
             {
                 List<regions> regions;
                 {
-                     var db = _service.GetService<CNMarketDB>();
-
-                    regions = await db.regions.AsNoTracking().ToListAsync();
+                     var  db = tq ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
+                    regions = await db.regions.AsNoTracking().OrderBy(p=>p.regionid).ToListAsync();
                 }
                 var delay = Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
                 try
                 {
                     foreach (var region in regions)
                     {
+                        if (stoppingToken.IsCancellationRequested) { continue;}
+                        _logger.LogInformation("开始下载订单: Region: " + region.regionid +$" TQ: {tq}");
                         var newordertask =  GetESIOrders((int)region.regionid,tq);
                         
                         MarketDB db;
                         
-                        db = tq ? (MarketDB) _service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
+                        db = tq ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
                         var zone = DateTimeZoneProviders.Tzdb["Asia/Shanghai"];
                         var dttoday = zone.AtStartOfDay(DateTime.Today.ToLocalDateTime().Date);
                         var dtnext = dttoday.Plus(Duration.FromDays(1));
 
                         var order = await db.current_market.Where(p => p.regionid == region.regionid)
-                            .ToDictionaryAsync(p => p.orderid, p => p);
-
-                        var neworder = await newordertask;
+                            .ToDictionaryAsync(p=>p.orderid,p=>p);
+                        List<Get_markets_region_id_orders_200_ok> neworder;
+                        try
+                        {
+                            neworder = await newordertask;
+                        }
+                        catch (Exception e)
+                        {
+                            _logger.LogInformation("下载订单失败: Region: " + region.regionid + $" TQ: {tq}  "  + e.Message);
+                            continue;
+                        }
+                       
+                        _logger.LogInformation("完成下载订单: Region: " + region.regionid + $" TQ: {tq}");
+                       
                         foreach (var p in  neworder)
                         {
                             current_market market;
@@ -140,6 +152,12 @@ namespace CEMSync.Service.EVEMaps
 
                         }
 
+                        var allids = neworder.Select(o => o.Order_id).Distinct().ToList();
+                        foreach (var keyValuePair in order.Where(p =>
+                            !allids.Contains(p.Key)))
+                        {
+                            db.current_market.Remove(keyValuePair.Value);
+                        }
                         var alltypes = neworder.Select(p => p.Type_id).Distinct().ToList();
                         var todayhistsory = await db.market_markethistorybyday.Where(p =>
                             p.regionid == region.regionid && alltypes.Contains(p.typeid) &&
@@ -152,11 +170,7 @@ namespace CEMSync.Service.EVEMaps
                                     p.date < dtnext.ToInstant()).OrderByDescending(o => o.date).First())
                             .Where(p => p != null).ToDictionaryAsync(p => p.typeid, p => p);
 
-                        foreach (var keyValuePair in order.Where(p =>
-                            !neworder.Select(o => o.Order_id).Contains(p.Key)))
-                        {
-                            db.current_market.Remove(keyValuePair.Value);
-                        }
+                       
 
                         foreach (var rt in neworder.GroupBy(p => p.Type_id))
                         {
@@ -224,8 +238,9 @@ namespace CEMSync.Service.EVEMaps
                             }
 
                         }
-
+                        _logger.LogInformation("开始保存订单: Region: " + region.regionid + $" TQ: {tq}");
                         await db.SaveChangesAsync();
+                        _logger.LogInformation("完成保存订单: Region: " + region.regionid + $" TQ: {tq}");
 
                     }
                 }
@@ -252,7 +267,7 @@ namespace CEMSync.Service.EVEMaps
         {
             var cn = Update(stoppingToken, false);
             var tq= Update(stoppingToken, true);
-            // await tq;
+            // await cn;
             await Task.WhenAll(cn, tq);
         }
     }
