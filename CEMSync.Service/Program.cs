@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using System.Net;
 using System.Threading.Tasks;
 using CEMSync.Model.EVEMapsDB;
 using CEMSync.Service.EVEMaps;
@@ -64,7 +65,25 @@ namespace CEMSync.Service
 
                     services.AddTransient<ESICNService>();
                     services.AddTransient<ESITQService>();
-                    services.AddHttpClient<ESIClient>().AddPolicyHandler(message =>
+                    services.AddHttpClient<ESIClient>()
+                        .ConfigurePrimaryHttpMessageHandler(provider =>
+                        
+                            new HttpClientHandler()
+                            {
+                                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+
+                                MaxConnectionsPerServer = 50
+                            }
+                        )
+                        .ConfigureHttpMessageHandlerBuilder(handlerBuilder =>
+                    
+                        new HttpClientHandler()
+                        {
+                            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+
+                            MaxConnectionsPerServer = 50
+                        }
+                    ).AddPolicyHandler(message =>
                     {
                         Random jitterer = new Random();
                         return HttpPolicyExtensions
@@ -72,7 +91,24 @@ namespace CEMSync.Service
                             .OrResult(msg => msg.StatusCode == (System.Net.HttpStatusCode) 420)
                             .WaitAndRetryAsync(6, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt))+TimeSpan.FromMilliseconds(jitterer.Next(0,500)));
                     });
-                    services.AddHttpClient<ZKBService>().AddPolicyHandler(message =>
+                    services.AddHttpClient<ZKBService>()
+                        .ConfigurePrimaryHttpMessageHandler(provider =>
+
+                            new HttpClientHandler()
+                            {
+                                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+
+                                MaxConnectionsPerServer = 50
+                            }
+                        ).ConfigureHttpMessageHandlerBuilder(handlerBuilder => 
+                    
+                        new HttpClientHandler()
+                        {
+                            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+
+                            MaxConnectionsPerServer = 50
+                        }
+                    ).AddPolicyHandler(message =>
                     {
                         Random jitterer = new Random();
                         return HttpPolicyExtensions

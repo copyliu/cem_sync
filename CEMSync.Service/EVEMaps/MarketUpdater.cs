@@ -35,7 +35,7 @@ namespace CEMSync.Service.EVEMaps
             ESIService esi;
             esi = tq ?  (ESIService) this._tqesi : this._esi;
 
-
+            _logger.LogInformation("GET Market ESI "+regionid+" TQ:"+tq+" Page 1");
             var result = await esi._client.Get_markets_region_id_ordersAsync(null, null,
                 Order_type.All, 1, regionid,
                 null);
@@ -62,7 +62,7 @@ namespace CEMSync.Service.EVEMaps
             await Dasync.Collections.ParallelForEachExtensions.ParallelForEachAsync(Enumerable.Range(2, pages),
                 async pagenum =>
                 {
-
+                    _logger.LogInformation("GET Market ESI " + regionid + " TQ:" + tq + " Page "+pagenum);
                     var r = await esi._client.Get_markets_region_id_ordersAsync(null, null,
                         Order_type.All, pagenum, regionid,
                         null);
@@ -149,6 +149,15 @@ namespace CEMSync.Service.EVEMaps
                             market.range = p.Range.ConvertRange();
                             market.systemid = p.System_id;
                             market.regionid = region.regionid;
+                            if (db.Entry(market).State == EntityState.Added ||
+                                db.Entry(market).State == EntityState.Modified)
+                            {
+                                market.reportedtime=Instant.FromDateTimeOffset(DateTimeOffset.Now);
+                            }
+                            else
+                            {
+
+                            }
 
                         }
 
@@ -267,7 +276,7 @@ namespace CEMSync.Service.EVEMaps
         {
             var cn = Update(stoppingToken, false);
             var tq= Update(stoppingToken, true);
-            // await cn;
+            // await tq;
             await Task.WhenAll(cn, tq);
         }
     }
