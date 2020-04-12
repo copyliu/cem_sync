@@ -1,0 +1,1 @@
+dotnet ef dbcontext scaffold "Host=localhost;Database=evemaps;Username=postgres;Password=" Npgsql.EntityFrameworkCore.PostgreSQL -d --use-database-names -c EVEMapDB -f 

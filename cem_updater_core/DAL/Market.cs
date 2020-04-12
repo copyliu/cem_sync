@@ -311,7 +311,7 @@ namespace cem_updater_core.DAL
                         {
                             sellprice[reader.GetInt32(0)] = reader.IsDBNull(1) ? 0 : reader.GetDouble(1);
 
-                            buyvol[reader.GetInt32(0)] = reader.IsDBNull(2) ? 0 : reader.GetInt64(2);
+                            sellvol[reader.GetInt32(0)] = reader.IsDBNull(2) ? 0 : reader.GetInt64(2);
                         }
                     }
 

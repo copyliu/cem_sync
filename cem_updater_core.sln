@@ -1,9 +1,19 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.27428.2027
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30002.166
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "cem_updater_core", "cem_updater_core\cem_updater_core.csproj", "{C37DB362-C857-4DB0-A358-7F0ECF81E577}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "cem_updater_core", "cem_updater_core\cem_updater_core.csproj", "{C37DB362-C857-4DB0-A358-7F0ECF81E577}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CEMSync.Model.EVEMapsDB", "CEMSync.Model.EVEMapsDB\CEMSync.Model.EVEMapsDB.csproj", "{EC59BED9-9CF1-4C38-A2B7-F0896055B436}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CEMSync.Service", "CEMSync.Service\CEMSync.Service.csproj", "{95946BA5-3AAB-43AC-B80F-067BA2A065A7}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CEMSync.ESI", "CEMSync.ESI\CEMSync.ESI.csproj", "{F952D415-04D7-4E79-A22B-665F4269AF3A}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "EVEMarketSite.Model", "EVEMarketSite.Model\EVEMarketSite.Model.csproj", "{5C4EB377-942F-4D4E-9A5D-4D0E31D7728C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CEMSync.Model.KillBoard", "CEMSync.Model.KillBoard\CEMSync.Model.KillBoard.csproj", "{55B68E8E-6748-4C00-9EEC-C93168A86B7C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +25,26 @@ Global
 		{C37DB362-C857-4DB0-A358-7F0ECF81E577}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C37DB362-C857-4DB0-A358-7F0ECF81E577}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C37DB362-C857-4DB0-A358-7F0ECF81E577}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EC59BED9-9CF1-4C38-A2B7-F0896055B436}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EC59BED9-9CF1-4C38-A2B7-F0896055B436}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EC59BED9-9CF1-4C38-A2B7-F0896055B436}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EC59BED9-9CF1-4C38-A2B7-F0896055B436}.Release|Any CPU.Build.0 = Release|Any CPU
+		{95946BA5-3AAB-43AC-B80F-067BA2A065A7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{95946BA5-3AAB-43AC-B80F-067BA2A065A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{95946BA5-3AAB-43AC-B80F-067BA2A065A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{95946BA5-3AAB-43AC-B80F-067BA2A065A7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F952D415-04D7-4E79-A22B-665F4269AF3A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F952D415-04D7-4E79-A22B-665F4269AF3A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F952D415-04D7-4E79-A22B-665F4269AF3A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F952D415-04D7-4E79-A22B-665F4269AF3A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5C4EB377-942F-4D4E-9A5D-4D0E31D7728C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5C4EB377-942F-4D4E-9A5D-4D0E31D7728C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5C4EB377-942F-4D4E-9A5D-4D0E31D7728C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5C4EB377-942F-4D4E-9A5D-4D0E31D7728C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{55B68E8E-6748-4C00-9EEC-C93168A86B7C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{55B68E8E-6748-4C00-9EEC-C93168A86B7C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{55B68E8E-6748-4C00-9EEC-C93168A86B7C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{55B68E8E-6748-4C00-9EEC-C93168A86B7C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
