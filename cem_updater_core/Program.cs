@@ -96,7 +96,7 @@ namespace cem_updater_core
                     try
                     {
                         Log("TQ Start");
-                        // await SyncESI(true);
+                        await SyncESI(true);
                         Log("TQ Stop");
                     }
                     catch (Exception e)
