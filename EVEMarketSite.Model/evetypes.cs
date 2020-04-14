@@ -42,27 +42,26 @@ namespace EVEMarketSite.Model
         public string typeName_en { get; set; }
         [StringLength(9000)]
         public string description_en { get; set; }
-        [Required]
+     
         [StringLength(300)]
         public string typeName_de { get; set; }
         public string description_de { get; set; }
-        [Required]
+
         [StringLength(300)]
         public string typeName_es { get; set; }
         public string description_es { get; set; }
-        [Required]
+   
         [StringLength(300)]
         public string typeName_fr { get; set; }
         public string description_fr { get; set; }
-        [Required]
+  
         [StringLength(300)]
         public string typeName_it { get; set; }
         public string description_it { get; set; }
-        [Required]
+      
         [StringLength(300)]
         public string typeName_ja { get; set; }
         public string description_ja { get; set; }
-        [Required]
         [StringLength(300)]
         public string typeName_ru { get; set; }
         public string description_ru { get; set; }

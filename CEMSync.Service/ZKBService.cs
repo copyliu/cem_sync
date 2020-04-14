@@ -22,7 +22,7 @@ namespace CEMSync.Service
         public async Task<CEMSync.Model.KillBoard.killboard_waiting_api> GetZkb(CancellationToken ctsToken)
         {
             var req = _httpClient.GetStreamAsync(
-                "https://redisq.zkillboard.com/listen.php?queueID=ceve-market.org&ttw=5");
+                "http://redisq.zkillboard.com/listen.php?queueID=ceve-market.org&ttw=5");
 
 
             var crestresult = await

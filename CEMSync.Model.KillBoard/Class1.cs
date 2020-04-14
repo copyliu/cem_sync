@@ -25,7 +25,7 @@ namespace CEMSync.Model.KillBoard
 
         public virtual DbSet<killboard_war> killboard_war { get; set; }
 
-        protected KillboardDB(DbContextOptions<KillboardDB> options)
+        protected KillboardDB(DbContextOptions options)
             : base(options)
         {
         }
@@ -33,13 +33,13 @@ namespace CEMSync.Model.KillBoard
 
     public class CNKillboardDB : KillboardDB
     {
-        public CNKillboardDB(DbContextOptions<CNKillboardDB> options) : base(ChangeOptionsType<KillboardDB>(options))
+        public CNKillboardDB(DbContextOptions<CNKillboardDB> options) : base(options)
         {
         }
     }
     public class TQKillboardDB : KillboardDB
     {
-        public TQKillboardDB(DbContextOptions<TQKillboardDB> options) : base(ChangeOptionsType<KillboardDB>(options))
+        public TQKillboardDB(DbContextOptions<TQKillboardDB> options) : base(options)
         {
         }
     }

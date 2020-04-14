@@ -11,15 +11,16 @@ namespace EVEMarketSite.Model
     public class CNMarketDB : MarketDB
     {
         public CNMarketDB(DbContextOptions<CNMarketDB> options)
-            : base(ChangeOptionsType<MarketDB>(options))
+            : base(options)
         {
         }
     }
 
     public class TQMarketDB : MarketDB
     {
+
         public TQMarketDB(DbContextOptions<TQMarketDB> options)
-            : base(ChangeOptionsType< MarketDB >( options))
+            : base(options)
         {
         }
     }
@@ -28,6 +29,7 @@ namespace EVEMarketSite.Model
     {
         protected static DbContextOptions<T> ChangeOptionsType<T>(DbContextOptions options) where T : DbContext
         {
+          
 
             var sqlExt = options.Extensions.FirstOrDefault(e => e is NpgsqlOptionsExtension);
 
@@ -43,7 +45,7 @@ namespace EVEMarketSite.Model
         {
         }
 
-        public MarketDB(DbContextOptions<MarketDB> options)
+        public MarketDB(DbContextOptions options)
             : base(options)
         {
         }
