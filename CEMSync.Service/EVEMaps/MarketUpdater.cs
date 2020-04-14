@@ -122,24 +122,35 @@ namespace CEMSync.Service.EVEMaps
             {
                 List<regions> regions;
                 {
-                     var  db = tq ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
+                      var  db = tq ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
                     regions = await db.regions.AsNoTracking().OrderBy(p=>p.regionid).ToListAsync();
                 }
                 var delay = Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
-               
+                var downloadTasks=new Dictionary<long, Task<List<Get_markets_region_id_orders_200_ok>>>();
+                Task<List<Get_markets_region_id_orders_200_ok>> tmptask=null;
+                foreach (var region in regions)
+                {
+                    if (tmptask==null)
+                    { tmptask = GetESIOrders((int)region.regionid, tq);}
+                    else
+                    {
+                        tmptask = tmptask.ContinueWith(task => GetESIOrders((int) region.regionid, tq)).Unwrap();
+                    }
+                    downloadTasks[region.regionid] = tmptask;
+                }
+
+
                     foreach (var region in regions)
                     {
                         try
                         {
                         if (stoppingToken.IsCancellationRequested) { continue; }
                         _logger.LogInformation("开始下载订单: Region: " + region.regionid + $" TQ: {tq}");
-                        var newordertask = GetESIOrders((int)region.regionid, tq);
+                        var newordertask =  downloadTasks[region.regionid];
 
-                        MarketDB db;
-
-                        db = tq ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
-                        var zone = DateTimeZoneProviders.Tzdb["Asia/Shanghai"];
-                        var dttoday = zone.AtStartOfDay(DateTime.Today.ToLocalDateTime().Date);
+                        MarketDB db = tq ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
+                       
+                        var dttoday = MarketDB.ChinaTimeZone.AtStartOfDay(DateTime.Today.ToLocalDateTime().Date);
                         var dtnext = dttoday.Plus(Duration.FromDays(1));
 
                         var order = await db.current_market.Where(p => p.regionid == region.regionid)
@@ -156,9 +167,21 @@ namespace CEMSync.Service.EVEMaps
                         }
                         var allorders = neworder.GroupBy(p => p.Order_id).Select(p => p.First()).ToList();
                         _logger.LogInformation("完成下载订单: Region: " + region.regionid + $" TQ: {tq}; APIOrder {neworder.Count}/{allorders.Count}");
-                        
+                        var alltypes = allorders.Select(p => p.Type_id).Distinct().ToList();
+                        var todayhistsory = await db.market_markethistorybyday.Where(p =>
+                            p.regionid == region.regionid && alltypes.Contains(p.typeid) &&
+                            p.date == dttoday.Date).ToDictionaryAsync(p => p.typeid, p => p);
+
+
+                        var realtimehistory = await db.evetypes.Where(p => alltypes.Contains(p.typeID)).Select(ip => ip
+                                .market_realtimehistory.Where(p =>
+                                    p.regionid == region.regionid && p.date >= dttoday.ToInstant() &&
+                                    p.date < dtnext.ToInstant()).OrderByDescending(o => o.date).First())
+                            .Where(p => p != null).ToDictionaryAsync(p => p.typeid, p => p);
+
                         foreach (var p in allorders)
                         {
+                            
                             current_market market;
                             if (!order.TryGetValue(p.Order_id, out market))
                             {
@@ -184,45 +207,19 @@ namespace CEMSync.Service.EVEMaps
                             {
                                 market.reportedtime = Instant.FromDateTimeOffset(DateTimeOffset.Now);
                             }
-                            else
-                            {
-
-                            }
 
                         }
 
-                        var allids = allorders.Select(o => o.Order_id).Distinct().ToList();
-                        var delteids = order.Select(p => p.Key).Where(p => !allids.Contains(p));
-                        // db.RemoveRange(db.current_market.Where(p=>p.regionid==region.regionid&&delteids.Contains(p.orderid)));
+                    
 
-
-                        //
-                        //
-                        // foreach (var keyValuePair in order.Where(p =>
-                        //     !allids.Contains(p.Key)))
-                        // {
-                        //     db.current_market.Remove(keyValuePair.Value);
-                        // }
-                        var alltypes = allorders.Select(p => p.Type_id).Distinct().ToList();
-                        var todayhistsory = await db.market_markethistorybyday.Where(p =>
-                            p.regionid == region.regionid && alltypes.Contains(p.typeid) &&
-                            p.date == dttoday.Date).ToDictionaryAsync(p => p.typeid, p => p);
-
-
-                        var realtimehistory = await db.evetypes.Where(p => alltypes.Contains(p.typeID)).Select(ip => ip
-                               .market_realtimehistory.Where(p =>
-                                   p.regionid == region.regionid && p.date >= dttoday.ToInstant() &&
-                                   p.date < dtnext.ToInstant()).OrderByDescending(o => o.date).First())
-                            .Where(p => p != null).ToDictionaryAsync(p => p.typeid, p => p);
-
-
-
-                        foreach (var rt in allorders.GroupBy(p => p.Type_id))
+                        foreach (var rt in allorders.AsParallel().GroupBy(p => p.Type_id,(i, oks) =>new {Key=i,Value=oks.ToList().AsParallel()}))
                         {
-                            if (rt.Any(p => p.Is_buy_order == false))
+                            var hassellorder = rt.Value.Any(p => p.Is_buy_order == false);
+                            var hasbuyorder = rt.Value.Any(p => p.Is_buy_order == true);
+                            if (hassellorder)
                             {
                                 market_markethistorybyday hisbydate;
-                                var price = rt.Where(p => !p.Is_buy_order).Min(o => o.Price);
+                                var price = rt.Value.Where(p => !p.Is_buy_order).Min(o => o.Price);
                                 if (!todayhistsory.TryGetValue(rt.Key, out hisbydate))
                                 {
                                     hisbydate = new market_markethistorybyday();
@@ -241,7 +238,7 @@ namespace CEMSync.Service.EVEMaps
 
                             }
 
-                            if (rt.Any())
+                            if (rt.Value.Any())
                             {
                                 market_realtimehistory realtime;
                                 realtime = new market_realtimehistory
@@ -249,17 +246,17 @@ namespace CEMSync.Service.EVEMaps
                                     regionid = region.regionid,
                                     typeid = rt.Key,
                                     date = Instant.FromDateTimeOffset(DateTimeOffset.Now),
-                                    buy = rt.Any(p => p.Is_buy_order)
-                                        ? rt.Where(p => p.Is_buy_order).Max(p => p.Price)
+                                    buy = hasbuyorder
+                                        ? rt.Value.Where(p => p.Is_buy_order).Max(p => p.Price)
                                         : 0,
-                                    sell = rt.Any(p => !p.Is_buy_order)
-                                        ? rt.Where(p => !p.Is_buy_order).Min(p => p.Price)
+                                    sell = hassellorder
+                                        ? rt.Value.Where(p => !p.Is_buy_order).Min(p => p.Price)
                                         : 0,
-                                    buyvol = rt.Any(p => p.Is_buy_order)
-                                        ? rt.Where(p => p.Is_buy_order).Sum(p => (long)p.Volume_remain)
+                                    buyvol = hasbuyorder
+                                        ? rt.Value.Where(p => p.Is_buy_order).Sum(p => (long)p.Volume_remain)
                                         : 0,
-                                    sellvol = rt.Any(p => !p.Is_buy_order)
-                                        ? rt.Where(p => !p.Is_buy_order).Sum(p => (long)p.Volume_remain)
+                                    sellvol = hassellorder
+                                        ? rt.Value.Where(p => !p.Is_buy_order).Sum(p => (long)p.Volume_remain)
                                         : 0,
 
                                 };
@@ -283,6 +280,9 @@ namespace CEMSync.Service.EVEMaps
                             }
 
                         }
+                        var allids = allorders.AsParallel().Select(o => o.Order_id).Distinct().ToList();
+                        var delteids = order.AsParallel().Select(p => p.Key).Where(p => !allids.Contains(p));
+
                         _logger.LogInformation("开始保存订单: Region: " + region.regionid + $" TQ: {tq}");
                         await using var trans = await db.Database.BeginTransactionAsync();
                         await db.Database.ExecuteSqlInterpolatedAsync(

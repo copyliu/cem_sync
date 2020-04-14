@@ -16,6 +16,7 @@ using System.Reflection.Metadata.Ecma335;
 using CEMSync.ESI;
 using CEMSync.Model.KillBoard;
 using EVEMarketSite.Model;
+using NLog.Extensions.Hosting;
 using Polly;
 using Polly.Extensions.Http;
 using Polly.Timeout;
@@ -38,9 +39,10 @@ namespace CEMSync.Service
                 }).ConfigureServices((hostContext, services) =>
                 {
                     services.AddOptions();
-                   
+                  
+                 
 
-                    services.AddDbContextPool<EVEMapDB>(options =>
+                    services.AddDbContext<EVEMapDB>(options =>
                         options.UseNpgsql(hostContext.Configuration.GetConnectionString("EVEMapsDB")));
 
                     services.AddDbContext<CNMarketDB>(options =>
@@ -139,7 +141,6 @@ namespace CEMSync.Service
                     else if (tqmarket)
                     {
                         services.AddHostedService<TQMarketUpdater>();
-                        // services.AddHostedService<TQKMLoader>();
 
                     }
                     else
@@ -156,6 +157,7 @@ namespace CEMSync.Service
                     //     loggingBuilder.AddConsole();
                     // });
 
+
                     services.AddLogging(loggingBuilder =>
                     {
                         loggingBuilder.ClearProviders();
@@ -165,11 +167,12 @@ namespace CEMSync.Service
                     });
 
 
-
-                });
-
+                }).UseNLog();
             await builder.RunConsoleAsync();
 
         }
     }
+
+
+
 }

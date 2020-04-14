@@ -41,11 +41,12 @@ namespace EVEMarketSite.Model
                 .Options;
         }
         public static DateTimeZone ChinaTimeZone = DateTimeZoneProviders.Tzdb["Asia/Shanghai"];
-        public MarketDB()
+
+        protected MarketDB()
         {
         }
 
-        public MarketDB(DbContextOptions options)
+        protected MarketDB(DbContextOptions options)
             : base(options)
         {
         }
