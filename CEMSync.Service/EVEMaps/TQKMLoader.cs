@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using CEMSync.ESI;
 using CEMSync.Model.KillBoard;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -37,11 +39,23 @@ namespace CEMSync.Service.EVEMaps
                         TQKillboardDB _db = _service.GetService<TQKillboardDB>();
                         _logger.LogInformation("New KM: "+model.killID);
                         _db.killboard_waiting_api.Add(model);
-                        await _db.SaveChangesAsync();
+                        try
+                        {
+                            await _db.SaveChangesAsync();
+
+                        }
+                        finally
+                        {
+                            _db.ChangeTracker.Entries()
+                                .Where(e => e.Entity != null).ToList()
+                                .ForEach(e => e.State = EntityState.Detached);
+                        }
+                       
                     }
                 }
                 catch (Exception e)
                 {
+                  
                 }
                
                 try
