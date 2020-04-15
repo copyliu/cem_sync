@@ -81,8 +81,8 @@ namespace EVEMarketSite.Model
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-          
 
+            modelBuilder.Entity<current_market>().HasKey(p => new {p.id, p.regionid});
 
             OnModelCreatingPartial(modelBuilder);
         }

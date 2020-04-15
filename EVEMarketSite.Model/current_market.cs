@@ -9,7 +9,7 @@ namespace EVEMarketSite.Model
     [Table("current_market")]
     public partial class current_market
     {
-        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long id { get; set; }
         public long regionid { get; set; }
         public long? systemid { get; set; }
