@@ -96,18 +96,20 @@ namespace CEMSync.Service
                     services.AddHttpClient<ESIClient>(client =>
                         {
                             client.Timeout = TimeSpan.FromSeconds(10);
+                            
                             client.DefaultRequestHeaders.Add("User-Agent", "CEVE-MARKET slack-copyliu CEMSync-Service");
                         })
                         .ConfigurePrimaryHttpMessageHandler(provider =>
                         {
                             var handler = new HttpClientHandler();
+                            
                             if (handler.SupportsAutomaticDecompression)
                             {
                                 handler.AutomaticDecompression = DecompressionMethods.All;
                             }
                             return handler;
                         }
-                        )
+                        ).AddPolicyHandler(Policy.TimeoutAsync<HttpResponseMessage>(120))
                         .AddPolicyHandler(message =>
                         {
                             Random jitterer = new Random();
@@ -124,7 +126,7 @@ namespace CEMSync.Service
                                         TimeSpan.FromSeconds(2*(retryAttempt-1)) +
                                         TimeSpan.FromMilliseconds(jitterer.Next(0, 500)))
                                 ;
-                        }).AddPolicyHandler(Policy.TimeoutAsync<HttpResponseMessage>(10)); ;
+                        }).AddPolicyHandler(Policy.TimeoutAsync<HttpResponseMessage>(10)); 
                         
                     services.AddTransient<ESICNService>();
                     services.AddTransient<ESITQService>();
