@@ -11,6 +11,7 @@ using EVEMarketSite.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 using NodaTime.Extensions;
@@ -19,9 +20,12 @@ namespace CEMSync.Service.EVEMaps
 {
     public class TQMarketUpdater : MarketUpdater
     {
-        public TQMarketUpdater(ESICNService esi, ESITQService tqesi, ILogger<MarketUpdater> logger,
-            IServiceProvider service) : base(esi, tqesi, logger, service)
+        public TQMarketUpdater(IHttpClientFactory httpClientFactory, ILogger<MarketUpdater> logger,
+            IServiceProvider service) : base(httpClientFactory, logger, service)
         {
+            var http = httpClientFactory.CreateClient("TQ");
+            this.client = service.GetService<ITypedHttpClientFactory<ESIClient>>().CreateClient(http);
+
         }
 
 
@@ -56,9 +60,12 @@ namespace CEMSync.Service.EVEMaps
 
     public class CNMarketUpdater : MarketUpdater
     {
-        public CNMarketUpdater(ESICNService esi, ESITQService tqesi, ILogger<MarketUpdater> logger,
-            IServiceProvider service) : base(esi, tqesi, logger, service)
+        public CNMarketUpdater(IHttpClientFactory httpClientFactory, ILogger<MarketUpdater> logger,
+            IServiceProvider service) : base(httpClientFactory, logger, service)
         {
+           var http = httpClientFactory.CreateClient("CN");
+           this.client = service.GetService<ITypedHttpClientFactory<ESIClient>>().CreateClient(http);
+
         }
 
 
@@ -91,29 +98,28 @@ namespace CEMSync.Service.EVEMaps
 
     public abstract class MarketUpdater : BackgroundService
     {
-        protected readonly ESICNService _esi;
-        protected readonly ESITQService _tqesi;
         protected readonly ILogger<MarketUpdater> _logger;
         protected readonly IServiceProvider _service;
-
-        public MarketUpdater(ESICNService esi, ESITQService tqesi, ILogger<MarketUpdater> logger,
+        protected IESIClient client;
+        public MarketUpdater(IHttpClientFactory httpClientFactory, ILogger<MarketUpdater> logger,
             IServiceProvider service)
         {
-            _esi = esi;
-            _tqesi = tqesi;
             _logger = logger;
             _service = service;
         }
 
-        async Task<List<Get_markets_region_id_orders_200_ok>> GetESIOrders(int regionid, bool tq)
+        async Task<List<Get_markets_region_id_orders_200_ok>> GetESIOrders(int regionid, bool tq, CancellationToken stoppingToken)
         {
-            ESIService esi;
-            esi = tq ? (ESIService) this._tqesi : this._esi;
-
+         
             _logger.LogInformation("GET Market ESI " + regionid + " TQ:" + tq + " Page 1");
-            var result = await esi._client.Get_markets_region_id_ordersAsync(null, null,
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+
+            using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, stoppingToken);
+
+                var result = await client.Get_markets_region_id_ordersAsync(null, null,
                 Order_type.All, 1, regionid,
-                null).ConfigureAwait(false);
+                null, linkedCts.Token);
 
             if (!result.Headers.TryGetValue("X-Pages", out var xPages) ||
                 !int.TryParse(xPages.FirstOrDefault(), out var pages))
@@ -126,80 +132,69 @@ namespace CEMSync.Service.EVEMaps
                 return result.Result.ToList();
             }
 
-            var ret = new ConcurrentBag<Get_markets_region_id_orders_200_ok>();
-            foreach (var getMarketsRegionIdOrders200Ok in result.Result)
-            {
-                ret.Add(getMarketsRegionIdOrders200Ok);
-            }
+           
+           
 
             result.Headers.TryGetValue("Last-Modified", out var page1lastmodstring);
             var page1lastmod = page1lastmodstring?.FirstOrDefault();
 
-            CancellationTokenSource cts = new CancellationTokenSource();
-
-            await Dasync.Collections.ParallelForEachExtensions.ParallelForEachAsync(Enumerable.Range(2, pages - 1),
-                async pagenum =>
+           var loadtasks= Enumerable.Range(2, pages - 1).Select(async pagenum =>
+            {
+               
+                var r = await client.Get_markets_region_id_ordersAsync(null, null,
+                    Order_type.All, pagenum, regionid,
+                    null, linkedCts.Token);
+                if (r.StatusCode != 200)
                 {
-                    _logger.LogInformation("GET Market ESI " + regionid + " TQ:" + tq + " Page " + pagenum);
-                    var r = await esi._client.Get_markets_region_id_ordersAsync(null, null,
-                        Order_type.All, pagenum, regionid,
-                        null, cts.Token).ConfigureAwait(false);
-                    if (r.StatusCode != 200)
-                    {
-                        cts.Cancel();
-                        throw new Exception("Error " + r.StatusCode);
-                    }
+                    cts.Cancel();
+                    throw new Exception("Error " + r.StatusCode);
+                }
+                _logger.LogInformation("GET Market ESI " + regionid + " TQ:" + tq + " Page " + pagenum);
+                r.Headers.TryGetValue("Last-Modified", out var lastmod);
+                var lastmoddate = lastmod?.FirstOrDefault();
+                if (page1lastmod != lastmoddate)
+                {
+                    cts.Cancel();
+                    throw new Exception("WrongMarketSnapShot");
+                }
 
-                    r.Headers.TryGetValue("Last-Modified", out var lastmod);
-                    var lastmoddate = lastmod?.FirstOrDefault();
-                    if (page1lastmod != lastmoddate)
-                    {
-                        cts.Cancel();
-                        throw new Exception("WrongMarketSnapShot");
-                    }
-
-                    foreach (var getMarketsRegionIdOrders200Ok in r.Result)
-                    {
-                        ret.Add(getMarketsRegionIdOrders200Ok);
-                    }
-
-
-
-
-
-                }, 30, cts.Token);
+                return r.Result.ToList();
+            }).ToList();
+           
             if (cts.IsCancellationRequested)
             {
                 throw new Exception("error");
             }
 
-            return ret.ToList();
+            await Task.WhenAll(loadtasks);
+
+            var page1 = result.Result.ToList();
+            page1.AddRange(loadtasks.SelectMany(p=>p.Result));
+            return page1;
         }
 
         protected async Task Update(CancellationToken stoppingToken, bool tq = false)
         {
-
-            List<regions> regions;
-
             var db = tq ? (MarketDB) _service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
-            regions = await db.regions.AsNoTracking().OrderBy(p => p.regionid).ToListAsync();
+            var regions = await db.regions.AsNoTracking().OrderBy(p => p.regionid).ToListAsync();
 
 
             var downloadTasks = new Dictionary<long, Task<List<Get_markets_region_id_orders_200_ok>>>();
-            Task<List<Get_markets_region_id_orders_200_ok>> tmptask = null;
+            long? previd = null;
             foreach (var region in regions)
             {
-               
-                if (tmptask == null)
+                if (!previd.HasValue)
                 {
-                    downloadTasks[region.regionid] = GetESIOrders((int)region.regionid, tq);
-                   
+                    downloadTasks[region.regionid] = GetESIOrders((int) region.regionid, tq, stoppingToken);
                 }
                 else
                 {
-                    downloadTasks[region.regionid] = tmptask.ContinueWith(task => GetESIOrders((int)region.regionid, tq)).Unwrap();
+                    downloadTasks[region.regionid] = downloadTasks[previd.Value]
+                        .ContinueWith(t => GetESIOrders((int) region.regionid, tq, stoppingToken), stoppingToken)
+                        .Unwrap();
                 }
-                tmptask = downloadTasks[region.regionid];
+
+                previd = region.regionid;
 
             }
 
@@ -214,7 +209,6 @@ namespace CEMSync.Service.EVEMaps
                     }
 
                     _logger.LogInformation("开始下载订单: Region: " + region.regionid + $" TQ: {tq}");
-                    var newordertask = downloadTasks[region.regionid];
 
 
                     var dttoday = MarketDB.ChinaTimeZone.AtStartOfDay(DateTime.Today.ToLocalDateTime().Date);
@@ -222,7 +216,7 @@ namespace CEMSync.Service.EVEMaps
                     List<Get_markets_region_id_orders_200_ok> neworder;
                     try
                     {
-                        neworder = await newordertask;
+                        neworder = await downloadTasks[region.regionid];
                     }
                     catch (Exception e)
                     {

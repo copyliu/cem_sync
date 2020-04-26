@@ -30,7 +30,7 @@ namespace CEMSync.Service
             var builder = new HostBuilder()
                 .ConfigureAppConfiguration((hostingContext, config) =>
                 {
-                  
+
                     config.AddJsonFile("appsettings.json", false)
                         .AddJsonFile($"appsettings.{hostingContext.HostingEnvironment.EnvironmentName}.json", true,
                             true);
@@ -39,8 +39,8 @@ namespace CEMSync.Service
                 }).ConfigureServices((hostContext, services) =>
                 {
                     services.AddOptions();
-                  
-                 
+
+
 
                     services.AddDbContext<EVEMapDB>(options =>
                         options.UseNpgsql(hostContext.Configuration.GetConnectionString("EVEMapsDB")));
@@ -57,79 +57,59 @@ namespace CEMSync.Service
                     services.AddDbContext<TQKillboardDB>(options =>
                         options.UseNpgsql(hostContext.Configuration.GetConnectionString("TQKillboardDB"),
                             builder => builder.UseNodaTime()));
+                    var timeoutPolicy = Policy.TimeoutAsync<HttpResponseMessage>(60);
+
+
+                    var httpClientHandler = new SocketsHttpHandler
+                    {
+                        AutomaticDecompression = DecompressionMethods.All,
+                        // ConnectTimeout = TimeSpan.FromSeconds(10),
+                        // ResponseDrainTimeout = TimeSpan.FromSeconds(60),
+
+                        
+                    };
+
+
+
+
+                    ;
+                    var asyncTimeoutPolicy = Policy.TimeoutAsync<HttpResponseMessage>(5*60);
+                    Random jitterer = new Random();
+                    var waitAndRetryAsync = HttpPolicyExtensions
+                        .HandleTransientHttpError()
+                        .OrResult(msg => msg.StatusCode == (System.Net.HttpStatusCode) 420)
+                        .Or<TimeoutRejectedException>()
+                        .WaitAndRetryAsync(6,
+                            retryAttempt =>
+                                TimeSpan.FromSeconds(2 * (retryAttempt - 1)) +
+                                TimeSpan.FromMilliseconds(jitterer.Next(0, 500)));
                     services.AddHttpClient<ZKBService>(client =>
                         {
                             client.Timeout = TimeSpan.FromSeconds(10);
                             client.DefaultRequestHeaders.Add("User-Agent", "CEVE-MARKET slack-copyliu CEMSync-Service");
                         })
-                  
-                        .ConfigurePrimaryHttpMessageHandler(provider =>
+                        .ConfigurePrimaryHttpMessageHandler(provider => httpClientHandler)
+                        .AddPolicyHandler(asyncTimeoutPolicy)
+                        .AddPolicyHandler(message => waitAndRetryAsync).AddPolicyHandler(timeoutPolicy);
+                    services.AddHttpClient<IESIClient, ESIClient>("CN", client =>
                         {
-                            var handler = new HttpClientHandler();
-                            
-                            if (handler.SupportsAutomaticDecompression)
-                            {
-                                handler.AutomaticDecompression = DecompressionMethods.All;
-                            }
-                            return handler;
-                        }
-                        ).AddPolicyHandler(message =>
-                        {
-                            Random jitterer = new Random();
-                            return
-
-                                HttpPolicyExtensions
-                                    .HandleTransientHttpError()
-                                    .OrResult(msg => msg.StatusCode == (System.Net.HttpStatusCode) 420)
-                                    .Or<TimeoutRejectedException>()
-                                    .WaitAndRetryAsync(6,
-                                        retryAttempt =>
-                                            TimeSpan.FromSeconds(2 * (retryAttempt - 1)) +
-                                            TimeSpan.FromMilliseconds(jitterer.Next(0, 500)));
-
-
-
-
-                        }).AddPolicyHandler(Policy.TimeoutAsync<HttpResponseMessage>(10));
-
-
-                    services.AddHttpClient<ESIClient>(client =>
-                        {
-                            client.Timeout = TimeSpan.FromSeconds(10);
-                            
+                            client.BaseAddress = new Uri("https://esi.evepc.163.com/latest/");
+                            client.Timeout = TimeSpan.FromSeconds(60);
                             client.DefaultRequestHeaders.Add("User-Agent", "CEVE-MARKET slack-copyliu CEMSync-Service");
                         })
-                        .ConfigurePrimaryHttpMessageHandler(provider =>
+                        .ConfigurePrimaryHttpMessageHandler(provider => httpClientHandler)
+                        .AddPolicyHandler(asyncTimeoutPolicy)
+                        .AddPolicyHandler(message => waitAndRetryAsync).AddPolicyHandler(timeoutPolicy);
+                    services.AddHttpClient<IESIClient, ESIClient>("TQ", client =>
                         {
-                            var handler = new HttpClientHandler();
-                            
-                            if (handler.SupportsAutomaticDecompression)
-                            {
-                                handler.AutomaticDecompression = DecompressionMethods.All;
-                            }
-                            return handler;
-                        }
-                        ).AddPolicyHandler(Policy.TimeoutAsync<HttpResponseMessage>(120))
-                        .AddPolicyHandler(message =>
-                        {
-                            Random jitterer = new Random();
+                            client.BaseAddress = new Uri("https://esi.evetech.net/latest/");
+                            client.Timeout = TimeSpan.FromSeconds(60);
+                            client.DefaultRequestHeaders.Add("User-Agent", "CEVE-MARKET slack-copyliu CEMSync-Service");
+                        })
+                        .ConfigurePrimaryHttpMessageHandler(provider => httpClientHandler)
+                        .AddPolicyHandler(asyncTimeoutPolicy)
+                        .AddPolicyHandler(message => waitAndRetryAsync).AddPolicyHandler(timeoutPolicy);
 
-                            return
-                               
-                                
-                                HttpPolicyExtensions
-                                .HandleTransientHttpError()
-                                .OrResult(msg => msg.StatusCode == (System.Net.HttpStatusCode) 420)
-                                .Or<TimeoutRejectedException>()
-                                .WaitAndRetryAsync(6,
-                                    retryAttempt =>
-                                        TimeSpan.FromSeconds(2*(retryAttempt-1)) +
-                                        TimeSpan.FromMilliseconds(jitterer.Next(0, 500)))
-                                ;
-                        }).AddPolicyHandler(Policy.TimeoutAsync<HttpResponseMessage>(10)); 
-                        
-                    services.AddTransient<ESICNService>();
-                    services.AddTransient<ESITQService>();
                     if (bootstrap)
                     {
                         services.AddHostedService<SdeUpdater>();

@@ -2,11 +2,27 @@
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using CEMSync.ESI;
 
 namespace CEMSync.Service
 {
-   public static class Utils
+    public class ForceHttp2Handler : DelegatingHandler
+    {
+        public ForceHttp2Handler(HttpMessageHandler innerHandler)
+            : base(innerHandler)
+        {
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            // request.Version = HttpVersion.Version20;
+            return base.SendAsync(request, cancellationToken);
+        }
+    }
+    public static class Utils
    {
        public static string esi_url = "https://esi.evepc.163.com/";
        public static HttpClient httpClient=new HttpClient();

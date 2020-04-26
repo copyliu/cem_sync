@@ -14,7 +14,7 @@ namespace CEMSync.ESI
 
         public ESITQService(ESIClient client) : base(client)
         {
-            _client.BaseUrl = "https://esi.evetech.net/latest/";
+            // _client.BaseUrl = "https://esi.evetech.net/latest/";
         }
 
       
@@ -27,7 +27,7 @@ namespace CEMSync.ESI
 
         public ESICNService(ESIClient client) : base(client)
         {
-            _client.BaseUrl = "https://esi.evepc.163.com/latest";
+            // _client.BaseUrl = "https://esi.evepc.163.com/latest";
         }
 
 

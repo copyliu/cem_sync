@@ -9,7 +9,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <OpenApiReference Include="OpenAPIs\ESI.json" Options="/OperationGenerationMode:SingleClientFromOperationId /WrapResponses:true">
+    <OpenApiReference Include="OpenAPIs\ESI.json" Options="/OperationGenerationMode:SingleClientFromOperationId /WrapResponses:true /GenerateClientInterfaces:true /DisposeHttpClient:false /InjectHttpClient:true /UseBaseUrl:false">
       <CodeGenerator>NSwagCSharp</CodeGenerator>
       <SourceUri>https://esi.evepc.163.com/latest/swagger.json</SourceUri>
     </OpenApiReference>
@@ -21,7 +21,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
-    <PackageReference Include="NSwag.ApiDescription.Client" Version="13.3.0">
+    <PackageReference Include="NSwag.ApiDescription.Client" Version="13.4.2">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
