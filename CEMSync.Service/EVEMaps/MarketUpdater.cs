@@ -170,7 +170,7 @@ namespace CEMSync.Service.EVEMaps
 
             var page1 = result.Result.ToList();
             page1.AddRange(loadtasks.SelectMany(p=>p.Result));
-            return page1;
+            return page1.Where(p=>p.Volume_remain>0).ToList();
         }
 
         protected async Task Update(CancellationToken stoppingToken, bool tq = false)

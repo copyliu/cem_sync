@@ -94,7 +94,7 @@ namespace CEMSync.Service
                     services.AddHttpClient<IESIClient, ESIClient>("CN", client =>
                         {
                             client.BaseAddress = new Uri("https://esi.evepc.163.com/latest/");
-                            client.Timeout = TimeSpan.FromSeconds(60);
+                            client.Timeout = TimeSpan.FromSeconds(20);
                             client.DefaultRequestHeaders.Add("User-Agent", "CEVE-MARKET slack-copyliu CEMSync-Service");
                         })
                         .ConfigurePrimaryHttpMessageHandler(provider => httpClientHandler)
@@ -103,7 +103,7 @@ namespace CEMSync.Service
                     services.AddHttpClient<IESIClient, ESIClient>("TQ", client =>
                         {
                             client.BaseAddress = new Uri("https://esi.evetech.net/latest/");
-                            client.Timeout = TimeSpan.FromSeconds(60);
+                            client.Timeout = TimeSpan.FromSeconds(20);
                             client.DefaultRequestHeaders.Add("User-Agent", "CEVE-MARKET slack-copyliu CEMSync-Service");
                         })
                         .ConfigurePrimaryHttpMessageHandler(provider => httpClientHandler)
