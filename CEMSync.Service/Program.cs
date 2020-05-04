@@ -63,9 +63,9 @@ namespace CEMSync.Service
                     var httpClientHandler = new SocketsHttpHandler
                     {
                         AutomaticDecompression = DecompressionMethods.All,
-                        // ConnectTimeout = TimeSpan.FromSeconds(10),
-                        // ResponseDrainTimeout = TimeSpan.FromSeconds(60),
-
+                        ConnectTimeout = TimeSpan.FromSeconds(5),
+                        ResponseDrainTimeout = TimeSpan.FromSeconds(10),
+                        
                         
                     };
 
@@ -74,15 +74,14 @@ namespace CEMSync.Service
 
                     ;
                     var asyncTimeoutPolicy = Policy.TimeoutAsync<HttpResponseMessage>(5*60);
-                    Random jitterer = new Random();
+                    // Random jitterer = new Random();
                     var waitAndRetryAsync = HttpPolicyExtensions
                         .HandleTransientHttpError()
                         .OrResult(msg => msg.StatusCode == (System.Net.HttpStatusCode) 420)
                         .Or<TimeoutRejectedException>()
                         .WaitAndRetryAsync(6,
                             retryAttempt =>
-                                TimeSpan.FromSeconds(2 * (retryAttempt - 1)) +
-                                TimeSpan.FromMilliseconds(jitterer.Next(0, 500)));
+                                TimeSpan.FromSeconds(1.5 * (retryAttempt - 1)));
                     services.AddHttpClient<ZKBService>(client =>
                         {
                             client.Timeout = TimeSpan.FromSeconds(10);
@@ -96,6 +95,7 @@ namespace CEMSync.Service
                             client.BaseAddress = new Uri("https://esi.evepc.163.com/latest/");
                             client.Timeout = TimeSpan.FromSeconds(20);
                             client.DefaultRequestHeaders.Add("User-Agent", "CEVE-MARKET slack-copyliu CEMSync-Service");
+                            
                         })
                         .ConfigurePrimaryHttpMessageHandler(provider => httpClientHandler)
                         .AddPolicyHandler(asyncTimeoutPolicy)
@@ -105,10 +105,12 @@ namespace CEMSync.Service
                             client.BaseAddress = new Uri("https://esi.evetech.net/latest/");
                             client.Timeout = TimeSpan.FromSeconds(20);
                             client.DefaultRequestHeaders.Add("User-Agent", "CEVE-MARKET slack-copyliu CEMSync-Service");
+                            client.DefaultRequestVersion=new Version(2,0);
                         })
                         .ConfigurePrimaryHttpMessageHandler(provider => httpClientHandler)
                         .AddPolicyHandler(asyncTimeoutPolicy)
-                        .AddPolicyHandler(message => waitAndRetryAsync).AddPolicyHandler(timeoutPolicy);
+                        .AddPolicyHandler(message => waitAndRetryAsync)
+                        .AddPolicyHandler(timeoutPolicy);
 
                     if (bootstrap)
                     {

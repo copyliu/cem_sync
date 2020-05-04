@@ -37,7 +37,10 @@ namespace CEMSync.Service.EVEMaps
                 var delay = Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
                 try
                 {
-                    await Update(stoppingToken, true);
+                    using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(30));
+                    using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, stoppingToken);
+
+                    await Update(linkedCts.Token, true);
                 }
                 catch (Exception e)
                 {
@@ -77,7 +80,11 @@ namespace CEMSync.Service.EVEMaps
                 var delay = Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
                 try
                 {
-                    await Update(stoppingToken, false);
+                    using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(30));
+
+                    using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, stoppingToken);
+
+                    await Update(linkedCts.Token, false);
                 }
                 catch (Exception e)
                 {
@@ -119,7 +126,7 @@ namespace CEMSync.Service.EVEMaps
 
                 var result = await client.Get_markets_region_id_ordersAsync(null, null,
                 Order_type.All, 1, regionid,
-                null, linkedCts.Token);
+                null, linkedCts.Token).ConfigureAwait(false);
 
             if (!result.Headers.TryGetValue("X-Pages", out var xPages) ||
                 !int.TryParse(xPages.FirstOrDefault(), out var pages))
@@ -136,14 +143,16 @@ namespace CEMSync.Service.EVEMaps
            
 
             result.Headers.TryGetValue("Last-Modified", out var page1lastmodstring);
+            ConcurrentBag<List<Get_markets_region_id_orders_200_ok>> res=new ConcurrentBag<List<Get_markets_region_id_orders_200_ok>>();
+            res.Add(result.Result.ToList());
             var page1lastmod = page1lastmodstring?.FirstOrDefault();
 
-           var loadtasks= Enumerable.Range(2, pages - 1).Select(async pagenum =>
+           await   Dasync.Collections.ParallelForEachExtensions.ParallelForEachAsync(Enumerable.Range(2, pages - 1), async pagenum =>
             {
                
                 var r = await client.Get_markets_region_id_ordersAsync(null, null,
                     Order_type.All, pagenum, regionid,
-                    null, linkedCts.Token);
+                    null, linkedCts.Token).ConfigureAwait(false);
                 if (r.StatusCode != 200)
                 {
                     cts.Cancel();
@@ -157,46 +166,44 @@ namespace CEMSync.Service.EVEMaps
                     cts.Cancel();
                     throw new Exception("WrongMarketSnapShot");
                 }
-
-                return r.Result.ToList();
-            }).ToList();
+                res.Add(r.Result.ToList());
+            },10, cts.Token);
            
-            if (cts.IsCancellationRequested)
-            {
-                throw new Exception("error");
-            }
 
-            await Task.WhenAll(loadtasks);
 
-            var page1 = result.Result.ToList();
-            page1.AddRange(loadtasks.SelectMany(p=>p.Result));
-            return page1.Where(p=>p.Volume_remain>0).ToList();
+            // var page1 = result.Result.ToList();
+            // page1.AddRange(loadtasks.SelectMany(p=>p.Result));
+            return res.SelectMany(p => p).Where(p => p.Volume_remain > 0).ToList();
+            // return page1.Where(p=>p.Volume_remain>0).ToList();
         }
 
         protected async Task Update(CancellationToken stoppingToken, bool tq = false)
         {
-            var db = tq ? (MarketDB) _service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
-            var regions = await db.regions.AsNoTracking().OrderBy(p => p.regionid).ToListAsync();
+            var db1 = tq ? (MarketDB) _service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
+            var regions = await db1.regions.AsNoTracking().OrderBy(p => p.regionid).ToListAsync();
 
 
             var downloadTasks = new Dictionary<long, Task<List<Get_markets_region_id_orders_200_ok>>>();
-            long? previd = null;
-            foreach (var region in regions)
-            {
-                if (!previd.HasValue)
+            
+                long? previd = null;
+                foreach (var region in regions)
                 {
-                    downloadTasks[region.regionid] = GetESIOrders((int) region.regionid, tq, stoppingToken);
-                }
-                else
-                {
-                    downloadTasks[region.regionid] = downloadTasks[previd.Value]
-                        .ContinueWith(t => GetESIOrders((int) region.regionid, tq, stoppingToken), stoppingToken)
-                        .Unwrap();
-                }
+                    if (!previd.HasValue)
+                    {
+                        downloadTasks[region.regionid] = GetESIOrders((int)region.regionid, tq, stoppingToken);
+                    }
+                    else
+                    {
+                        downloadTasks[region.regionid] = downloadTasks[previd.Value]
+                            .ContinueWith(t => GetESIOrders((int)region.regionid, tq, stoppingToken), stoppingToken)
+                            .Unwrap();
+                    }
 
-                previd = region.regionid;
+                    previd = region.regionid;
 
-            }
+                }
+            
+           
 
 
             foreach (var region in regions)
@@ -214,18 +221,24 @@ namespace CEMSync.Service.EVEMaps
                     var dttoday = MarketDB.ChinaTimeZone.AtStartOfDay(DateTime.Today.ToLocalDateTime().Date);
                     var dtnext = dttoday.Plus(Duration.FromDays(1));
                     List<Get_markets_region_id_orders_200_ok> neworder;
+
                     try
                     {
-                        neworder = await downloadTasks[region.regionid];
+                       
+                            neworder = await downloadTasks[region.regionid];
+                       
                     }
                     catch (Exception e)
                     {
                         _logger.LogInformation("下载订单失败: Region: " + region.regionid + $" TQ: {tq}  " + e.Message);
                         continue;
                     }
-
-                    var order = await db.current_market.Where(p => p.regionid == region.regionid)
-                        .ToDictionaryAsync(p => p.orderid, p => p);
+                
+                   
+                   
+                    var db = tq ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
+                 
+                    var order = await EntityFrameworkQueryableExtensions.ToDictionaryAsync<current_market, long, current_market>(db.current_market.Where(p => p.regionid == region.regionid), p => p.orderid, p => p);
 
 
 
@@ -275,19 +288,19 @@ namespace CEMSync.Service.EVEMaps
                         }
                     }
 
-                    var todayhistsory = await db.market_markethistorybyday.Where(p =>
+                    var todayhistsory = await EntityFrameworkQueryableExtensions.ToDictionaryAsync<market_markethistorybyday, int, market_markethistorybyday>(db.market_markethistorybyday.Where(p =>
                         p.regionid == region.regionid && alltypes.Contains(p.typeid) &&
-                        p.date == dttoday.Date).ToDictionaryAsync(p => p.typeid, p => p);
+                        p.date == dttoday.Date), p => p.typeid, p => p);
 
 
                     var realtimehistory =
 
                             !tq
-                                ? await db.evetypes.Where(p => alltypes.Contains(p.typeID)).Select(ip => ip
-                                        .market_realtimehistory.Where(p =>
-                                            p.regionid == region.regionid && p.date >= dttoday.ToInstant() &&
-                                            p.date < dtnext.ToInstant()).OrderByDescending(o => o.date).First())
-                                    .Where(p => p != null).ToDictionaryAsync(p => p.typeid, p => p)
+                                ? await EntityFrameworkQueryableExtensions.ToDictionaryAsync<market_realtimehistory, int, market_realtimehistory>(db.evetypes.Where(p => alltypes.Contains(p.typeID)).Select(ip => ip
+                                            .market_realtimehistory.Where(p =>
+                                                p.regionid == region.regionid && p.date >= dttoday.ToInstant() &&
+                                                p.date < dtnext.ToInstant()).OrderByDescending(o => o.date).First())
+                                        .Where(p => p != null), p => p.typeid, p => p)
 
                                 : null
                         ;
@@ -381,11 +394,10 @@ namespace CEMSync.Service.EVEMaps
                     }
                     finally
                     {
-
-                        db.ChangeTracker.Entries()
-                            .Where(e => e.Entity != null).ToList()
-                            .ForEach(e => e.State = EntityState.Detached);
-
+                        foreach (var entityEntry in db.ChangeTracker.Entries().ToArray())
+                        {
+                            entityEntry.State = EntityState.Detached;
+                        }
                     }
 
 
