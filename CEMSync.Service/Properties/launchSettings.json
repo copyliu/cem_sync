@@ -1,7 +1,8 @@
 {
   "profiles": {
     "CEMSync.Service": {
-      "commandName": "Project"
+      "commandName": "Project",
+      "commandLineArgs": "--bootstrap"
     }
   }
 }

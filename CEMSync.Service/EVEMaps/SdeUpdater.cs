@@ -2,13 +2,16 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using CEMSync.ESI;
 using CEMSync.Model.KillBoard;
 using EVEMarketSite.Model;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
 
 namespace CEMSync.Service.EVEMaps
@@ -17,18 +20,25 @@ namespace CEMSync.Service.EVEMaps
     {
         private readonly CNMarketDB _cndb;
         private readonly TQMarketDB _tqdb;
-        private readonly ESICNService _esi;
-        private readonly ESITQService _tqesi;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IServiceProvider _service;
+        private readonly ESIClient _esi;
+        private readonly ESIClient _tqesi;
         private readonly ILogger<SdeUpdater> _logger;
         private readonly IHostApplicationLifetime _lifetime;
 
         private static int MAX_THREAD = 30;
-        public SdeUpdater(CNMarketDB cndb,TQMarketDB tqdb, ESICNService esi, ESITQService tqesi, ILogger<SdeUpdater> logger, IHostApplicationLifetime lifetime)
+        public SdeUpdater(CNMarketDB cndb,TQMarketDB tqdb, IHttpClientFactory httpClientFactory, IServiceProvider service, ILogger<SdeUpdater> logger, IHostApplicationLifetime lifetime)
         {
             _cndb = cndb;
             _tqdb = tqdb;
-            _esi = esi;
-            _tqesi = tqesi;
+            _httpClientFactory = httpClientFactory;
+            _service = service;
+            var http1 = httpClientFactory.CreateClient("CN");
+            this._esi = service.GetService<ITypedHttpClientFactory<ESIClient>>().CreateClient(http1);
+            var http2 = httpClientFactory.CreateClient("TQ");
+            this._tqesi = service.GetService<ITypedHttpClientFactory<ESIClient>>().CreateClient(http2);
+
             _logger = logger;
             _lifetime = lifetime;
         }
@@ -36,31 +46,24 @@ namespace CEMSync.Service.EVEMaps
 
         public async Task<List<int>> GetAllTypeAsync(bool tq = false)
         {
-            ESIService esi = tq ? (ESIService)_tqesi : _esi;
+            ESIClient esi = tq ? (ESIClient)_tqesi : _esi;
             ConcurrentBag<int> result = new ConcurrentBag<int>();
+            var pageheaders = await esi.GetAllTypesPages();
 
-            var page1 = await esi._client.Get_universe_typesAsync(null,null,null);
-            if (!page1.Headers.TryGetValue("X-Pages", out var xPages) ||
+
+            if (!pageheaders.Headers.TryGetValues("x-pages", out var xPages) ||
                 !int.TryParse(xPages.FirstOrDefault(), out var pages))
             {
                 pages = 1;
             }
 
-            if (pages == 1)
-            {
-                return page1.Result.ToList();
-            }
-            foreach (var i in page1.Result)
-            {
-                result.Add(i);
-            }
 
-            await Dasync.Collections.ParallelForEachExtensions.ParallelForEachAsync( Enumerable.Range(2, pages - 1),async page =>
+            await Dasync.Collections.ParallelForEachExtensions.ParallelForEachAsync( Enumerable.Range(1, pages),async page =>
             {
-                var thispage = await esi._client.Get_universe_typesAsync(null, null, page);
+                var thispage = await esi.Get_universe_typesAsync( page);
 
               
-                foreach (var i in thispage.Result)
+                foreach (var i in thispage)
                 {
                     result.Add(i);
                 }
@@ -71,23 +74,24 @@ namespace CEMSync.Service.EVEMaps
         public async Task UpdateSde(bool tq=false)
         {
             MarketDB db = tq ? (MarketDB) _tqdb : _cndb;
-            ESIService esi = tq ? (ESIService) _tqesi : _esi;
+            ESIClient esi = tq ? (ESIClient) _tqesi : _esi;
             var oldgroups = await EntityFrameworkQueryableExtensions.ToListAsync(db.marketgroup);
 
-            var allmarketgroupstask =  esi._client.Get_markets_groupsAsync(null, null);
-     
+            var allmarketgroupstask = esi.Get_markets_groupsAsync();
+
+
             var alltypetask =  GetAllTypeAsync();
 
           
              var newmodels = new ConcurrentBag<EVEMarketSite.Model.marketgroup>();
-            await Dasync.Collections.ParallelForEachExtensions.ParallelForEachAsync((await allmarketgroupstask).Result.Distinct(),async i =>
+            await Dasync.Collections.ParallelForEachExtensions.ParallelForEachAsync((await allmarketgroupstask).Distinct(),async i =>
             {
                 while (true)
                 {
                     try
                     {
-                        var groupinfo_en = esi._client.Get_markets_groups_market_group_idAsync(AcceptLanguage.EnUs, null,null,Language.EnUs, i);
-                        var groupinfo_cn = esi._client.Get_markets_groups_market_group_idAsync(AcceptLanguage.Zh, null, null, Language.Zh, i);
+                        var groupinfo_en = esi.Get_markets_groups_market_group_idAsync("en-us",i);
+                        var groupinfo_cn = esi.Get_markets_groups_market_group_idAsync("zh",i);
 
                         await Task.WhenAll(groupinfo_cn, groupinfo_en);
                         _logger.LogDebug($"GetItemMarketGroupInfoV1Async {i}");
@@ -99,11 +103,11 @@ namespace CEMSync.Service.EVEMaps
                             newmodels.Add(oldmodel);
                         }
 
-                        oldmodel.marketGroupName_en = groupinfo_en.Result.Result.Name;
-                        oldmodel.marketGroupName = groupinfo_cn.Result.Result.Name;
-                        oldmodel.description = groupinfo_cn.Result.Result.Description;
-                        oldmodel.description_en = groupinfo_en.Result.Result.Description;
-                        oldmodel.parentGroupID = groupinfo_en.Result.Result.Parent_group_id;
+                        oldmodel.marketGroupName_en = groupinfo_en.Result.Name;
+                        oldmodel.marketGroupName = groupinfo_cn.Result.Name;
+                        oldmodel.description = groupinfo_cn.Result.Description;
+                        oldmodel.description_en = groupinfo_en.Result.Description;
+                        oldmodel.parentGroupID = groupinfo_en.Result.Parent_group_id;
                         return;
                     }
                     catch (Exception e)
@@ -127,11 +131,10 @@ namespace CEMSync.Service.EVEMaps
                     try
                     {
                         var groupinfo_en =
-                            esi._client.Get_universe_types_type_idAsync(AcceptLanguage.EnUs, null, null, Language.EnUs,
+                            esi.Get_universe_types_type_idAsync("en-us",
                                 i);
                         var groupinfo_cn = 
-                            esi._client.Get_universe_types_type_idAsync(AcceptLanguage.Zh, null, null, Language.Zh,
-                            i);
+                            esi.Get_universe_types_type_idAsync("zh", i);
                         await Task.WhenAll(groupinfo_cn, groupinfo_en);
                         _logger.LogDebug($"GetTypeInfoV3Async {i}");
                         var oldmodel = oldtypes.FirstOrDefault(p => p.typeID == i);
@@ -142,11 +145,11 @@ namespace CEMSync.Service.EVEMaps
                             newtypes.Add(oldmodel);
                         }
 
-                        oldmodel.typeName_en = groupinfo_en.Result.Result.Name;
-                        oldmodel.typeName = groupinfo_cn.Result.Result.Name;
-                        oldmodel.description = groupinfo_cn.Result.Result.Description;
-                        oldmodel.description_en = groupinfo_en.Result.Result.Description;
-                        oldmodel.groupID = groupinfo_en.Result.Result.Group_id;
+                        oldmodel.typeName_en = groupinfo_en.Result.Name;
+                        oldmodel.typeName = groupinfo_cn.Result.Name;
+                        oldmodel.description = groupinfo_cn.Result.Description;
+                        oldmodel.description_en = groupinfo_en.Result.Description;
+                        oldmodel.groupID = groupinfo_en.Result.Group_id;
                       
 
                        
@@ -170,9 +173,10 @@ namespace CEMSync.Service.EVEMaps
         {
             try
             {
+
                 await UpdateSde(true);
                 await UpdateSde(false);
-              
+
             }
             catch (Exception e)
             {

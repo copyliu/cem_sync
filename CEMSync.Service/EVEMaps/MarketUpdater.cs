@@ -107,7 +107,7 @@ namespace CEMSync.Service.EVEMaps
     {
         protected readonly ILogger<MarketUpdater> _logger;
         protected readonly IServiceProvider _service;
-        protected IESIClient client;
+        protected ESIClient client;
         public MarketUpdater(IHttpClientFactory httpClientFactory, ILogger<MarketUpdater> logger,
             IServiceProvider service)
         {
@@ -118,55 +118,43 @@ namespace CEMSync.Service.EVEMaps
         async Task<List<Get_markets_region_id_orders_200_ok>> GetESIOrders(int regionid, bool tq, CancellationToken stoppingToken)
         {
          
-            _logger.LogInformation("GET Market ESI " + regionid + " TQ:" + tq + " Page 1");
+            _logger.LogInformation("GET Market ESI " + regionid + " TQ:" + tq);
 
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
 
             using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, stoppingToken);
 
-                var result = await client.Get_markets_region_id_ordersAsync(null, null,
-                Order_type.All, 1, regionid,
-                null, linkedCts.Token).ConfigureAwait(false);
+            var pageheaders = await client.GetMarketOrdersHeaders(regionid, linkedCts.Token);
 
-            if (!result.Headers.TryGetValue("X-Pages", out var xPages) ||
-                !int.TryParse(xPages.FirstOrDefault(), out var pages))
+            var lastModified = pageheaders.Content.Headers.LastModified;
+            int pages;
+            if (!pageheaders.Headers.TryGetValues("x-pages", out var xPages) ||
+                !int.TryParse(xPages.FirstOrDefault(), out pages))
             {
                 pages = 1;
             }
 
-            if (pages == 1)
-            {
-                return result.Result.ToList();
-            }
 
            
            
-
-            result.Headers.TryGetValue("Last-Modified", out var page1lastmodstring);
             ConcurrentBag<List<Get_markets_region_id_orders_200_ok>> res=new ConcurrentBag<List<Get_markets_region_id_orders_200_ok>>();
-            res.Add(result.Result.ToList());
-            var page1lastmod = page1lastmodstring?.FirstOrDefault();
+           
 
-           await   Dasync.Collections.ParallelForEachExtensions.ParallelForEachAsync(Enumerable.Range(2, pages - 1), async pagenum =>
+           await   Dasync.Collections.ParallelForEachExtensions.ParallelForEachAsync(Enumerable.Range(1, pages), async pagenum =>
             {
-               
-                var r = await client.Get_markets_region_id_ordersAsync(null, null,
-                    Order_type.All, pagenum, regionid,
-                    null, linkedCts.Token).ConfigureAwait(false);
-                if (r.StatusCode != 200)
+
+                try
                 {
-                    cts.Cancel();
-                    throw new Exception("Error " + r.StatusCode);
+                    _logger.LogInformation("GET Market ESI " + regionid + " TQ:" + tq + " Page " + pagenum);
+                    var r = await client.Get_markets_region_id_ordersAsync(regionid, pagenum, linkedCts.Token, lastModified).ConfigureAwait(false);
+                    res.Add(r.ToList());
+
                 }
-                _logger.LogInformation("GET Market ESI " + regionid + " TQ:" + tq + " Page " + pagenum);
-                r.Headers.TryGetValue("Last-Modified", out var lastmod);
-                var lastmoddate = lastmod?.FirstOrDefault();
-                if (page1lastmod != lastmoddate)
+                catch (Exception e)
                 {
-                    cts.Cancel();
-                    throw new Exception("WrongMarketSnapShot");
+                      cts.Cancel();
+                      throw new Exception("Error " +e.Message);
                 }
-                res.Add(r.Result.ToList());
             },10, cts.Token);
            
 

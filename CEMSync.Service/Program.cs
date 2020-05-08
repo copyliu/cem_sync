@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging;
 using NLog.Extensions.Logging;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Reflection.Metadata.Ecma335;
 using CEMSync.ESI;
 using CEMSync.Model.KillBoard;
@@ -57,14 +58,14 @@ namespace CEMSync.Service
                     services.AddDbContext<TQKillboardDB>(options =>
                         options.UseNpgsql(hostContext.Configuration.GetConnectionString("TQKillboardDB"),
                             builder => builder.UseNodaTime()));
-                    var timeoutPolicy = Policy.TimeoutAsync<HttpResponseMessage>(60);
+                    var timeoutPolicy = Policy.TimeoutAsync<HttpResponseMessage>(30);
 
 
                     var httpClientHandler = new SocketsHttpHandler
                     {
                         AutomaticDecompression = DecompressionMethods.All,
-                        ConnectTimeout = TimeSpan.FromSeconds(5),
-                        ResponseDrainTimeout = TimeSpan.FromSeconds(10),
+                        // ConnectTimeout = TimeSpan.FromSeconds(5),
+                        // ResponseDrainTimeout = TimeSpan.FromSeconds(10),
                         
                         
                     };
@@ -79,6 +80,7 @@ namespace CEMSync.Service
                         .HandleTransientHttpError()
                         .OrResult(msg => msg.StatusCode == (System.Net.HttpStatusCode) 420)
                         .Or<TimeoutRejectedException>()
+                        .Or<SocketException>()
                         .WaitAndRetryAsync(6,
                             retryAttempt =>
                                 TimeSpan.FromSeconds(1.5 * (retryAttempt - 1)));
@@ -90,22 +92,22 @@ namespace CEMSync.Service
                         .ConfigurePrimaryHttpMessageHandler(provider => httpClientHandler)
                         .AddPolicyHandler(asyncTimeoutPolicy)
                         .AddPolicyHandler(message => waitAndRetryAsync).AddPolicyHandler(timeoutPolicy);
-                    services.AddHttpClient<IESIClient, ESIClient>("CN", client =>
+                    services.AddHttpClient<ESIClient>("CN", client =>
                         {
                             client.BaseAddress = new Uri("https://esi.evepc.163.com/latest/");
-                            client.Timeout = TimeSpan.FromSeconds(20);
+                            // client.Timeout = TimeSpan.FromSeconds(20);
                             client.DefaultRequestHeaders.Add("User-Agent", "CEVE-MARKET slack-copyliu CEMSync-Service");
                             
                         })
                         .ConfigurePrimaryHttpMessageHandler(provider => httpClientHandler)
                         .AddPolicyHandler(asyncTimeoutPolicy)
                         .AddPolicyHandler(message => waitAndRetryAsync).AddPolicyHandler(timeoutPolicy);
-                    services.AddHttpClient<IESIClient, ESIClient>("TQ", client =>
+                    services.AddHttpClient<ESIClient>("TQ", client =>
                         {
                             client.BaseAddress = new Uri("https://esi.evetech.net/latest/");
-                            client.Timeout = TimeSpan.FromSeconds(20);
+                            // client.Timeout = TimeSpan.FromSeconds(20);
                             client.DefaultRequestHeaders.Add("User-Agent", "CEVE-MARKET slack-copyliu CEMSync-Service");
-                            client.DefaultRequestVersion=new Version(2,0);
+                            // client.DefaultRequestVersion=new Version(2,0);
                         })
                         .ConfigurePrimaryHttpMessageHandler(provider => httpClientHandler)
                         .AddPolicyHandler(asyncTimeoutPolicy)

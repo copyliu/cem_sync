@@ -9,7 +9,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <OpenApiReference Include="OpenAPIs\ESI.json" Options="/OperationGenerationMode:SingleClientFromOperationId /WrapResponses:true /GenerateClientInterfaces:true /DisposeHttpClient:false /InjectHttpClient:true /UseBaseUrl:false">
+    <OpenApiReference Include="OpenAPIs\ESI.json" Options="/OperationGenerationMode:SingleClientFromOperationId /WrapResponses:true /GenerateClientInterfaces:true /generateClientClasses:false /DisposeHttpClient:false /InjectHttpClient:true /UseBaseUrl:false">
       <CodeGenerator>NSwagCSharp</CodeGenerator>
       <SourceUri>https://esi.evepc.163.com/latest/swagger.json</SourceUri>
     </OpenApiReference>
