@@ -43,30 +43,9 @@ namespace EVEMarketSite.Model
         [StringLength(9000)]
         public string description_en { get; set; }
      
-        [StringLength(300)]
-        public string typeName_de { get; set; }
-        public string description_de { get; set; }
+        // [InverseProperty(nameof(type_attributes.type_id))]
+        // public virtual ICollection<type_attributes> attributes { get; set; }
 
-        [StringLength(300)]
-        public string typeName_es { get; set; }
-        public string description_es { get; set; }
-   
-        [StringLength(300)]
-        public string typeName_fr { get; set; }
-        public string description_fr { get; set; }
-  
-        [StringLength(300)]
-        public string typeName_it { get; set; }
-        public string description_it { get; set; }
-      
-        [StringLength(300)]
-        public string typeName_ja { get; set; }
-        public string description_ja { get; set; }
-        [StringLength(300)]
-        public string typeName_ru { get; set; }
-        public string description_ru { get; set; }
-
-       
         [InverseProperty("type")]
         public virtual ICollection<current_market> current_market_p001 { get; set; }
        

@@ -83,7 +83,8 @@ namespace CEMSync.Service
                         .Or<SocketException>()
                         .WaitAndRetryAsync(6,
                             retryAttempt =>
-                                TimeSpan.FromSeconds(1.5 * (retryAttempt - 1)));
+                                TimeSpan.FromSeconds(1.5 * (retryAttempt - 1))
+                                , onRetry:(result, span) => result.Result.Dispose());
                     services.AddHttpClient<ZKBService>(client =>
                         {
                             client.Timeout = TimeSpan.FromSeconds(10);

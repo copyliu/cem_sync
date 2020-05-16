@@ -167,7 +167,7 @@ namespace CEMSync.Service.EVEMaps
 
         protected async Task Update(CancellationToken stoppingToken, bool tq = false)
         {
-            var db1 = tq ? (MarketDB) _service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
+            MarketDB db1 = tq ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
             var regions = await db1.regions.AsNoTracking().OrderBy(p => p.regionid).ToListAsync();
 
 
