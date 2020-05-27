@@ -25,7 +25,7 @@ namespace CEMSync.Service.EVEMaps
         {
             var http = httpClientFactory.CreateClient("TQ");
             this.client = service.GetService<ITypedHttpClientFactory<ESIClient>>().CreateClient(http);
-
+            this.IsTQ = true;
         }
 
 
@@ -40,7 +40,7 @@ namespace CEMSync.Service.EVEMaps
                     using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(30));
                     using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, stoppingToken);
 
-                    await Update(linkedCts.Token, true);
+                    await Update(linkedCts.Token);
                 }
                 catch (Exception e)
                 {
@@ -68,7 +68,7 @@ namespace CEMSync.Service.EVEMaps
         {
            var http = httpClientFactory.CreateClient("CN");
            this.client = service.GetService<ITypedHttpClientFactory<ESIClient>>().CreateClient(http);
-
+           this.IsTQ = false;
         }
 
 
@@ -84,7 +84,7 @@ namespace CEMSync.Service.EVEMaps
 
                     using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, stoppingToken);
 
-                    await Update(linkedCts.Token, false);
+                    await Update(linkedCts.Token);
                 }
                 catch (Exception e)
                 {
@@ -108,6 +108,7 @@ namespace CEMSync.Service.EVEMaps
         protected readonly ILogger<MarketUpdater> _logger;
         protected readonly IServiceProvider _service;
         protected ESIClient client;
+        protected bool IsTQ=false;
         public MarketUpdater(IHttpClientFactory httpClientFactory, ILogger<MarketUpdater> logger,
             IServiceProvider service)
         {
@@ -115,10 +116,10 @@ namespace CEMSync.Service.EVEMaps
             _service = service;
         }
 
-        async Task<List<Get_markets_region_id_orders_200_ok>> GetESIOrders(int regionid, bool tq, CancellationToken stoppingToken)
+        async Task<List<Get_markets_region_id_orders_200_ok>> GetESIOrders(int regionid,  CancellationToken stoppingToken)
         {
          
-            _logger.LogInformation("GET Market ESI " + regionid + " TQ:" + tq);
+            _logger.LogInformation("GET Market ESI " + regionid + " TQ:" + IsTQ);
 
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
 
@@ -145,7 +146,7 @@ namespace CEMSync.Service.EVEMaps
 
                 try
                 {
-                    _logger.LogInformation("GET Market ESI " + regionid + " TQ:" + tq + " Page " + pagenum);
+                    _logger.LogInformation("GET Market ESI " + regionid + " TQ:" + IsTQ + " Page " + pagenum);
                     var r = await client.Get_markets_region_id_ordersAsync(regionid, pagenum, linkedCts.Token, lastModified).ConfigureAwait(false);
                     res.Add(r.ToList());
 
@@ -165,9 +166,9 @@ namespace CEMSync.Service.EVEMaps
             // return page1.Where(p=>p.Volume_remain>0).ToList();
         }
 
-        protected async Task Update(CancellationToken stoppingToken, bool tq = false)
+        protected async Task Update(CancellationToken stoppingToken)
         {
-            MarketDB db1 = tq ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
+            MarketDB db1 = IsTQ ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
             var regions = await db1.regions.AsNoTracking().OrderBy(p => p.regionid).ToListAsync();
 
 
@@ -178,12 +179,12 @@ namespace CEMSync.Service.EVEMaps
                 {
                     if (!previd.HasValue)
                     {
-                        downloadTasks[region.regionid] = GetESIOrders((int)region.regionid, tq, stoppingToken);
+                        downloadTasks[region.regionid] = GetESIOrders((int)region.regionid,  stoppingToken);
                     }
                     else
                     {
                         downloadTasks[region.regionid] = downloadTasks[previd.Value]
-                            .ContinueWith(t => GetESIOrders((int)region.regionid, tq, stoppingToken), stoppingToken)
+                            .ContinueWith(t => GetESIOrders((int)region.regionid,  stoppingToken), stoppingToken)
                             .Unwrap();
                     }
 
@@ -203,7 +204,7 @@ namespace CEMSync.Service.EVEMaps
                         return;
                     }
 
-                    _logger.LogInformation("开始下载订单: Region: " + region.regionid + $" TQ: {tq}");
+                    _logger.LogInformation("开始下载订单: Region: " + region.regionid + $" TQ: {IsTQ}");
 
 
                     var dttoday = MarketDB.ChinaTimeZone.AtStartOfDay(DateTime.Today.ToLocalDateTime().Date);
@@ -218,13 +219,13 @@ namespace CEMSync.Service.EVEMaps
                     }
                     catch (Exception e)
                     {
-                        _logger.LogInformation("下载订单失败: Region: " + region.regionid + $" TQ: {tq}  " + e.Message);
+                        _logger.LogInformation("下载订单失败: Region: " + region.regionid + $" TQ: {IsTQ}  " + e.Message);
                         continue;
                     }
                 
                    
                    
-                    var db = tq ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
+                    var db = IsTQ ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
                  
                     var order = await EntityFrameworkQueryableExtensions.ToDictionaryAsync<current_market, long, current_market>(db.current_market.Where(p => p.regionid == region.regionid), p => p.orderid, p => p);
 
@@ -232,7 +233,7 @@ namespace CEMSync.Service.EVEMaps
 
                     var allorders = neworder.GroupBy(p => p.Order_id).Select(p => p.First()).ToList();
                     _logger.LogInformation("完成下载订单: Region: " + region.regionid +
-                                           $" TQ: {tq}; APIOrder {neworder.Count}/{allorders.Count}");
+                                           $" TQ: {IsTQ}; APIOrder {neworder.Count}/{allorders.Count}");
                     var alltypes = allorders.Select(p => p.Type_id).Distinct().ToList();
 
                     ConcurrentDictionary<long, current_market> orders =
@@ -283,7 +284,7 @@ namespace CEMSync.Service.EVEMaps
 
                     var realtimehistory =
 
-                            !tq
+                            !IsTQ
                                 ? await EntityFrameworkQueryableExtensions.ToDictionaryAsync<market_realtimehistory, int, market_realtimehistory>(db.evetypes.Where(p => alltypes.Contains(p.typeID)).Select(ip => ip
                                             .market_realtimehistory.Where(p =>
                                                 p.regionid == region.regionid && p.date >= dttoday.ToInstant() &&
@@ -314,13 +315,13 @@ namespace CEMSync.Service.EVEMaps
 
                             hisbydate.end = price;
                             hisbydate.max = Math.Max(hisbydate.max, price);
-                            hisbydate.min = Math.Max(hisbydate.min, price);
+                            hisbydate.min = Math.Min(hisbydate.min, price);
 
 
 
                         }
 
-                        if (!tq && rt.Value.Any())
+                        if (!IsTQ && rt.Value.Any())
                         {
                             market_realtimehistory realtime;
                             realtime = new market_realtimehistory
@@ -366,7 +367,7 @@ namespace CEMSync.Service.EVEMaps
                     var allids = allorders.AsParallel().Select(o => o.Order_id).Distinct().ToList();
                     var delteids = orders.Select(p => p.Key).Where(p => !allids.Contains(p));
 
-                    _logger.LogInformation("开始保存订单: Region: " + region.regionid + $" TQ: {tq}");
+                    _logger.LogInformation("开始保存订单: Region: " + region.regionid + $" TQ: {IsTQ}");
 
                     await using var trans = await db.Database.BeginTransactionAsync();
 
@@ -378,7 +379,7 @@ namespace CEMSync.Service.EVEMaps
 
                         await db.SaveChangesAsync();
                         await trans.CommitAsync();
-                        _logger.LogInformation("完成保存订单: Region: " + region.regionid + $" TQ: {tq}");
+                        _logger.LogInformation("完成保存订单: Region: " + region.regionid + $" TQ: {IsTQ}");
                     }
                     finally
                     {
