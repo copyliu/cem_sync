@@ -37,7 +37,7 @@ namespace CEMSync.Service
             {
                 try
                 {
-                    result = await base.SendAsync(request, token);
+                    result = await base.SendAsync(request, token).ConfigureAwait(false);
                     if (result.IsSuccessStatusCode) return result;
                     else
                     {

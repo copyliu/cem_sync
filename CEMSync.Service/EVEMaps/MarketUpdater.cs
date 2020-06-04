@@ -138,31 +138,43 @@ namespace CEMSync.Service.EVEMaps
 
            
            
-            ConcurrentBag<List<Get_markets_region_id_orders_200_ok>> res=new ConcurrentBag<List<Get_markets_region_id_orders_200_ok>>();
+            // ConcurrentBag<List<Get_markets_region_id_orders_200_ok>> res=new ConcurrentBag<List<Get_markets_region_id_orders_200_ok>>();
+
+
+
+            var tasks=Enumerable.Range(1, pages).ToList().Select(p =>
+            
+                client.Get_markets_region_id_ordersAsync(regionid, p, linkedCts.Token, lastModified)
+            ).ToList();
+
            
+           await Task.WhenAll(tasks);
+           return tasks.SelectMany(p=>p.Result).Where(p => p.Volume_remain > 0).ToList();
 
-           await   Dasync.Collections.ParallelForEachExtensions.ParallelForEachAsync(Enumerable.Range(1, pages), async pagenum =>
-            {
-
-                try
-                {
-                    _logger.LogInformation("GET Market ESI " + regionid + " TQ:" + IsTQ + " Page " + pagenum);
-                    var r = await client.Get_markets_region_id_ordersAsync(regionid, pagenum, linkedCts.Token, lastModified).ConfigureAwait(false);
-                    res.Add(r.ToList());
-
-                }
-                catch (Exception e)
-                {
-                      cts.Cancel();
-                      throw new Exception("Error " +e.Message);
-                }
-            },10, cts.Token);
-           
+            //
+            //
+            // await   Dasync.Collections.ParallelForEachExtensions.ParallelForEachAsync(Enumerable.Range(1, pages), async pagenum =>
+            //  {
+            //
+            //      try
+            //      {
+            //          _logger.LogInformation("GET Market ESI " + regionid + " TQ:" + IsTQ + " Page " + pagenum);
+            //          var r = await client.Get_markets_region_id_ordersAsync(regionid, pagenum, linkedCts.Token, lastModified).ConfigureAwait(false);
+            //          res.Add(r.ToList());
+            //
+            //      }
+            //      catch (Exception e)
+            //      {
+            //            cts.Cancel();
+            //            throw new Exception("Error " +e.Message);
+            //      }
+            //  },10, cts.Token);
+            //
 
 
             // var page1 = result.Result.ToList();
             // page1.AddRange(loadtasks.SelectMany(p=>p.Result));
-            return res.SelectMany(p => p).Where(p => p.Volume_remain > 0).ToList();
+            // return res.SelectMany(p => p).Where(p => p.Volume_remain > 0).ToList();
             // return page1.Where(p=>p.Volume_remain>0).ToList();
         }
 
@@ -315,7 +327,15 @@ namespace CEMSync.Service.EVEMaps
 
                             hisbydate.end = price;
                             hisbydate.max = Math.Max(hisbydate.max, price);
-                            hisbydate.min = Math.Min(hisbydate.min, price);
+                            if (hisbydate.min > 0)
+                            {
+                                hisbydate.min = Math.Min(hisbydate.min, price);
+                            }
+                            else
+                            {
+                                hisbydate.min = price;
+                            }
+                            
 
 
 
