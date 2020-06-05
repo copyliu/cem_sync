@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Reflection;
 using System.Threading;
@@ -23,8 +24,18 @@ namespace CEMSync.Service.EVEMaps
         public TQMarketUpdater(IHttpClientFactory httpClientFactory, ILogger<MarketUpdater> logger,
             IServiceProvider service) : base(httpClientFactory, logger, service)
         {
+            // var http = new HttpClient(new SocketsHttpHandler() {AutomaticDecompression = DecompressionMethods.All})
+            // {
+            //     Timeout = TimeSpan.FromSeconds(30),
+            //     BaseAddress = new Uri("https://esi.evetech.net/latest/"),
+            //
+            // };
+            // http.DefaultRequestHeaders.Add("User-Agent",
+            //     "CEVE-MARKET slack-copyliu CEMSync-Service");
+            // this.client = new ESIClient(http); 
             var http = httpClientFactory.CreateClient("TQ");
             this.client = service.GetService<ITypedHttpClientFactory<ESIClient>>().CreateClient(http);
+            //service.GetService<ITypedHttpClientFactory<ESIClient>>().CreateClient(http);
             this.IsTQ = true;
         }
 

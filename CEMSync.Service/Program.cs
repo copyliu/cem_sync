@@ -95,10 +95,10 @@ namespace CEMSync.Service
                             // ResponseDrainTimeout = TimeSpan.FromSeconds(10),
 
 
-                        });
-                        // .AddPolicyHandler(asyncTimeoutPolicy)
-                        // .AddPolicyHandler(message => waitAndRetryAsync)
-                        // .AddPolicyHandler(timeoutPolicy);
+                        })
+                        .AddPolicyHandler(asyncTimeoutPolicy)
+                        .AddPolicyHandler(message => waitAndRetryAsync)
+                        .AddPolicyHandler(timeoutPolicy);
                     services.AddHttpClient<ESIClient>("CN", client =>
                         {
                             client.BaseAddress = new Uri("https://esi.evepc.163.com/latest/");
@@ -106,17 +106,17 @@ namespace CEMSync.Service
                             client.DefaultRequestHeaders.Add("User-Agent", "CEVE-MARKET slack-copyliu CEMSync-Service");
 
                         })
-                        .ConfigurePrimaryHttpMessageHandler(provider => new RetryHandler(new SocketsHttpHandler
+                        .ConfigurePrimaryHttpMessageHandler(provider => new SocketsHttpHandler
                         {
                             AutomaticDecompression = DecompressionMethods.All,
                             // ConnectTimeout = TimeSpan.FromSeconds(5),
                             // ResponseDrainTimeout = TimeSpan.FromSeconds(10),
 
 
-                        }));
-                        // .AddPolicyHandler(asyncTimeoutPolicy)
-                        // .AddPolicyHandler(message => waitAndRetryAsync)
-                        // .AddPolicyHandler(timeoutPolicy);
+                        })
+                        .AddPolicyHandler(asyncTimeoutPolicy)
+                        .AddPolicyHandler(message => waitAndRetryAsync)
+                        .AddPolicyHandler(timeoutPolicy);
                         services.AddHttpClient<ESIClient>("TQ", client =>
                             {
                                 client.BaseAddress = new Uri("https://esi.evetech.net/latest/");
@@ -126,17 +126,17 @@ namespace CEMSync.Service
                                 // client.DefaultRequestVersion=new Version(2,0);
                                 
                             })
-                            .ConfigurePrimaryHttpMessageHandler(provider => new RetryHandler(new SocketsHttpHandler
+                            .ConfigurePrimaryHttpMessageHandler(provider => new SocketsHttpHandler
                             {
                                 AutomaticDecompression = DecompressionMethods.All,
                                 // ConnectTimeout = TimeSpan.FromSeconds(5),
                                 // ResponseDrainTimeout = TimeSpan.FromSeconds(10),
 
 
-                            }));
-                        // .AddPolicyHandler(asyncTimeoutPolicy)
-                        // .AddPolicyHandler(message => waitAndRetryAsync)
-                        // .AddPolicyHandler(timeoutPolicy);
+                            })
+                        .AddPolicyHandler(asyncTimeoutPolicy)
+                        .AddPolicyHandler(message => waitAndRetryAsync)
+                        .AddPolicyHandler(timeoutPolicy);
 
                     if (bootstrap)
                     {

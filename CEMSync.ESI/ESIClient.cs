@@ -29,7 +29,7 @@ namespace CEMSync.ESI
             int page, CancellationToken token, DateTimeOffset? lastmod)
         {
             var url = $"markets/{regionid}/orders/?order_type=all&page={page}";
-            var response = await this.http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token);
+            var response = await this.http.GetAsync(url, token);
             if (!response.IsSuccessStatusCode)
             {
                 throw new Exception("Status Code:" + response.StatusCode);
@@ -46,7 +46,7 @@ namespace CEMSync.ESI
         public async Task<List<int>> Get_universe_typesAsync(int page)
         {
             var url = $"universe/types/?page={page}";
-            var response = await this.http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+            var response = await this.http.GetAsync(url, HttpCompletionOption.ResponseContentRead);
             if (!response.IsSuccessStatusCode)
             {
                 throw new Exception("Status Code:" + response.StatusCode);
@@ -84,7 +84,7 @@ namespace CEMSync.ESI
         public async Task<List<int>> Get_markets_groupsAsync()
         {
             var url = $"markets/groups/";
-            var response = await this.http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+            var response = await this.http.GetAsync(url, HttpCompletionOption.ResponseContentRead);
             if (!response.IsSuccessStatusCode)
             {
                 throw new Exception("Status Code:" + response.StatusCode);
@@ -97,7 +97,7 @@ namespace CEMSync.ESI
         public async Task<Get_markets_groups_market_group_id_ok> Get_markets_groups_market_group_idAsync(string lang,int groupid)
         {
             var url = $"markets/groups/{groupid}/?language={lang}";
-            var response = await this.http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+            var response = await this.http.GetAsync(url, HttpCompletionOption.ResponseContentRead);
             if (!response.IsSuccessStatusCode)
             {
                 throw new Exception("Status Code:" + response.StatusCode);
@@ -109,7 +109,7 @@ namespace CEMSync.ESI
         public async Task<Get_universe_types_type_id_ok> Get_universe_types_type_idAsync(string lang, int groupid)
         {
             var url = $"universe/types/{groupid}/?language={lang}";
-            var response = await this.http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+            var response = await this.http.GetAsync(url, HttpCompletionOption.ResponseContentRead);
             if (!response.IsSuccessStatusCode)
             {
                 throw new Exception("Status Code:" + response.StatusCode);
