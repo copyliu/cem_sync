@@ -77,7 +77,7 @@ namespace CEMSync.Service
                         .Or<TimeoutRejectedException>()
                         .Or<SocketException>()
 
-                        .WaitAndRetryAsync(3,
+                        .WaitAndRetryAsync(6,
                             retryAttempt =>
                                 TimeSpan.FromSeconds(1.5 * (retryAttempt - 1))
                             , onRetry: (result, span) => result.Result.Dispose());
