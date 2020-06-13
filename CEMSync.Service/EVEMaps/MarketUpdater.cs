@@ -35,9 +35,12 @@ namespace CEMSync.Service.EVEMaps
             // this.client = new ESIClient(http); 
             var http = httpClientFactory.CreateClient("TQ");
             this.client = service.GetService<ITypedHttpClientFactory<ESIClient>>().CreateClient(http);
+            this.client.IsTq = true;
             //service.GetService<ITypedHttpClientFactory<ESIClient>>().CreateClient(http);
             this.IsTQ = true;
         }
+
+ 
 
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -80,6 +83,7 @@ namespace CEMSync.Service.EVEMaps
            var http = httpClientFactory.CreateClient("CN");
            this.client = service.GetService<ITypedHttpClientFactory<ESIClient>>().CreateClient(http);
            this.IsTQ = false;
+           this.client.IsTq = false;
         }
 
 
@@ -126,6 +130,88 @@ namespace CEMSync.Service.EVEMaps
             _logger = logger;
             _service = service;
         }
+
+        async Task<List<stations>> UpdateCitidals(CancellationToken stoppingToken)
+        {
+            MarketDB db1 = IsTQ ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
+            var citidals = await this.client.GetAllCitidalIds(stoppingToken);
+            var tasks = citidals.Select(p => new {p,task= this.client.GetCitidal(p)}).ToList();
+            var oldstations = await EntityFrameworkQueryableExtensions.ToListAsync(db1.stations.Where(p => p.stationid > int.MaxValue));
+            try
+            {
+                await Task.WhenAll(tasks.Select(p => p.task));
+            }
+            catch (Exception e)
+            {
+                return await db1.stations.Where(p => p.stationid > int.MaxValue).AsNoTracking()
+                    .ToListAsync(stoppingToken);
+            }
+         
+            foreach (var task in tasks)
+            {
+                var citidalinfo = task.task.Result;
+                var model = oldstations.FirstOrDefault(p => p.stationid == task.p);
+                if (model == null)
+                {
+                    model=new stations();
+                    model.stationid = task.p;
+                    db1.stations.Add(model);
+
+                }
+
+                model.systemid = citidalinfo.Solar_system_id;
+                model.corpid = citidalinfo.Owner_id;
+                model.stationname = citidalinfo.Name;
+
+
+            }
+
+            await db1.SaveChangesAsync(stoppingToken);
+            return await db1.stations.Where(p => p.stationid > int.MaxValue).AsNoTracking()
+                .ToListAsync(stoppingToken);
+        }
+
+        async Task<List<Get_markets_structures_structure_id_200_ok>> GetStructOrders(long structid,
+            CancellationToken stoppingToken)
+        {
+            _logger.LogInformation("GET Market ESI " + structid + " TQ:" + IsTQ);
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+
+            using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, stoppingToken);
+
+            var pageheaders = await client.GetMarketstructureOrdersHeaders(structid, linkedCts.Token);
+            if (pageheaders.StatusCode == HttpStatusCode.Forbidden ||
+                pageheaders.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                return new List<Get_markets_structures_structure_id_200_ok>();
+            }
+            if (!pageheaders.IsSuccessStatusCode)
+            {
+                throw new Exception($"structid {structid} order Error");
+            }
+            var lastModified = pageheaders.Content.Headers.LastModified;
+            int pages;
+            if (!pageheaders.Headers.TryGetValues("x-pages", out var xPages) ||
+                !int.TryParse(xPages.FirstOrDefault(), out pages))
+            {
+                pages = 1;
+            }
+
+            // ConcurrentBag<List<Get_markets_region_id_orders_200_ok>> res=new ConcurrentBag<List<Get_markets_region_id_orders_200_ok>>();
+
+
+            var tasks = Enumerable.Range(1, pages).ToList().Select(p =>
+
+                client.Get_markets_structure_ordersAsync(structid, p, linkedCts.Token, lastModified)
+            ).ToList();
+
+
+            await Task.WhenAll(tasks);
+            return tasks.SelectMany(p => p.Result).Where(p => p.Volume_remain > 0).ToList();
+
+        }
+
 
         async Task<List<Get_markets_region_id_orders_200_ok>> GetESIOrders(int regionid,  CancellationToken stoppingToken)
         {
@@ -191,6 +277,9 @@ namespace CEMSync.Service.EVEMaps
 
         protected async Task Update(CancellationToken stoppingToken)
         {
+
+           var stations= (await UpdateCitidals(stoppingToken)).ToDictionary(p=>p.stationid,p=>p.systemid);
+
             MarketDB db1 = IsTQ ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
             var regions = await db1.regions.AsNoTracking().OrderBy(p => p.regionid).ToListAsync();
 
@@ -254,9 +343,74 @@ namespace CEMSync.Service.EVEMaps
 
 
 
-                    var allorders = neworder.GroupBy(p => p.Order_id).Select(p => p.First()).ToList();
+                    
                     _logger.LogInformation("完成下载订单: Region: " + region.regionid +
-                                           $" TQ: {IsTQ}; APIOrder {neworder.Count}/{allorders.Count}");
+                                           $" TQ: {IsTQ}; APIOrder {neworder.Count}");
+
+                    var citidal=order.Select(p => p.Value).Where(p => p.stationid > int.MaxValue).Select(p => p.stationid)
+                        .Distinct().ToList();
+                    citidal.AddRange(neworder.Where(p=>p.Location_id>int.MaxValue).Select(p=>p.Location_id).Distinct());
+                    citidal = citidal.Distinct().ToList();
+
+                    var citidaltasks=citidal.Select(p => GetStructOrders(p, stoppingToken)).ToList();
+                    await Task.WhenAll(citidaltasks);
+
+
+
+                    foreach (var citidaltask in citidaltasks.SelectMany(p=>p.Result))
+                    {
+                        if (stations.ContainsKey(citidaltask.Location_id))
+                        {
+                            var orderinfo = new Get_markets_region_id_orders_200_ok()
+                            {
+                                Location_id = citidaltask.Location_id,
+                                Duration = citidaltask.Duration,
+                                Is_buy_order = citidaltask.Is_buy_order,
+                                Issued = citidaltask.Issued,
+                                Min_volume = citidaltask.Min_volume,
+                                Order_id = citidaltask.Order_id,
+                                Price = citidaltask.Price,
+                                Type_id = citidaltask.Type_id,
+                                Volume_remain = citidaltask.Volume_remain,
+                                Volume_total = citidaltask.Volume_total
+
+
+
+                            };
+                            orderinfo.System_id = (int)stations[citidaltask.Location_id];
+                            orderinfo.Range = citidaltask.Range switch
+                            {
+                                Get_markets_structures_structure_id_200_okRange.Region =>
+                                Get_markets_region_id_orders_200_okRange.Region,
+                                Get_markets_structures_structure_id_200_okRange.Solarsystem =>
+                                Get_markets_region_id_orders_200_okRange.Solarsystem,
+                                Get_markets_structures_structure_id_200_okRange.Station=>
+                                Get_markets_region_id_orders_200_okRange.Station,
+                                Get_markets_structures_structure_id_200_okRange._1 => Get_markets_region_id_orders_200_okRange._1,
+                                Get_markets_structures_structure_id_200_okRange._2 => Get_markets_region_id_orders_200_okRange._2,
+                                Get_markets_structures_structure_id_200_okRange._3 => Get_markets_region_id_orders_200_okRange._3,
+                                Get_markets_structures_structure_id_200_okRange._4 => Get_markets_region_id_orders_200_okRange._4,
+                                Get_markets_structures_structure_id_200_okRange._5 => Get_markets_region_id_orders_200_okRange._5,
+                                Get_markets_structures_structure_id_200_okRange._10 => Get_markets_region_id_orders_200_okRange._10,
+                                Get_markets_structures_structure_id_200_okRange._20 => Get_markets_region_id_orders_200_okRange._20,
+                                Get_markets_structures_structure_id_200_okRange._30 => Get_markets_region_id_orders_200_okRange._30,
+                                Get_markets_structures_structure_id_200_okRange._40 => Get_markets_region_id_orders_200_okRange._40,
+                                _=>orderinfo.Range
+
+                            };
+                            neworder.Add(orderinfo);
+                        }
+                        
+                       
+                    }
+                 
+                    var allorders= neworder.GroupBy(p => p.Order_id).Select(p => p.First()).ToList();
+
+                    _logger.LogInformation("完成下载玩家建筑物订单: Region: " + region.regionid +
+                                           $" TQ: {IsTQ}; ");
+
+
+
                     var alltypes = allorders.Select(p => p.Type_id).Distinct().ToList();
 
                     ConcurrentDictionary<long, current_market> orders =

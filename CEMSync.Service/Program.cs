@@ -43,7 +43,7 @@ namespace CEMSync.Service
                 {
                     services.AddOptions();
 
-
+                    services.Configure<MyConfig>(hostContext.Configuration);
 
                     services.AddDbContext<EVEMapDB>(options =>
                         options.UseNpgsql(hostContext.Configuration.GetConnectionString("EVEMapsDB")));
@@ -76,11 +76,25 @@ namespace CEMSync.Service
                         .OrResult(msg => msg.StatusCode == (System.Net.HttpStatusCode) 420)
                         .Or<TimeoutRejectedException>()
                         .Or<SocketException>()
-
+                      
                         .WaitAndRetryAsync(6,
-                            retryAttempt =>
-                                TimeSpan.FromSeconds(1.5 * (retryAttempt - 1))
-                            , onRetry: (result, span) => result.Result.Dispose());
+                            (retryAttempt,result,context) =>
+                            {
+                                if (result.Result.StatusCode == (HttpStatusCode) 420)
+                                {
+                                    var val = result.Result.Headers.GetValues("x-esi-error-limit-reset").FirstOrDefault();
+                                    if (int.TryParse(val, out int sec))
+                                    {
+                                        return TimeSpan.FromSeconds(sec+1);
+                                    }
+
+                                }
+                                return TimeSpan.FromSeconds(1.5 * (retryAttempt - 1));
+                            }, (result, span, arg3, arg4) =>
+                            {
+                                result.Result.Dispose();
+                                return Task.CompletedTask;
+                            });
 
 
                     services.AddHttpClient<ZKBService>(client =>

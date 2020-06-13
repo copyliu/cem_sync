@@ -2,7 +2,7 @@
   "profiles": {
     "CEMSync.Service": {
       "commandName": "Project",
-      "commandLineArgs": "--bootstrap"
+      "commandLineArgs": "--tqmarket"
     }
   }
 }

@@ -77,10 +77,11 @@ namespace CEMSync.Service.EVEMaps
             ESIClient esi = tq ? (ESIClient) _tqesi : _esi;
             var oldgroups = await EntityFrameworkQueryableExtensions.ToListAsync(db.marketgroup);
 
+            var attr = esi.GetAllAttrs();
             var allmarketgroupstask = esi.Get_markets_groupsAsync();
 
 
-            var alltypetask =  GetAllTypeAsync();
+            var alltypetask =  GetAllTypeAsync(tq);
 
           
              var newmodels = new ConcurrentBag<EVEMarketSite.Model.marketgroup>();
@@ -123,8 +124,33 @@ namespace CEMSync.Service.EVEMaps
             await db.SaveChangesAsync();
             _logger.LogDebug($"Save GetMarketItemGroupInfo OK");
 
+            var oldattr = await EntityFrameworkQueryableExtensions.ToListAsync(db.dogma_attributes);
+            foreach (var m in await attr)
+            {
+                var model = oldattr.FirstOrDefault(p => p.attribute_id == m.Attribute_id);
+                if (model == null)
+                {
+                    model=new dogma_attributes();
+                    db.dogma_attributes.Add(model);
+                }
+
+                model.attribute_id = m.Attribute_id;
+                model.name = m.Name;
+                model.description = m.Description;
+                model.default_value = m.Default_value;
+                model.display_name = m.Display_name;
+                model.high_is_good = m.High_is_good;
+                model.icon_id = m.Icon_id;
+                model.published = m.Published;
+                model.stackable = m.Stackable;
+                model.unit_id = m.Unit_id;
+            }
+
+            await db.SaveChangesAsync();
             var oldtypes = await EntityFrameworkQueryableExtensions.ToListAsync(db.evetypes);
+            var oldtypeattr = await EntityFrameworkQueryableExtensions.ToListAsync(db.type_attributes);
             var newtypes = new ConcurrentBag<evetypes>();
+            var newtypeattrs=new ConcurrentBag<type_attributes>();
             await Dasync.Collections.ParallelForEachExtensions.ParallelForEachAsync(await alltypetask,async i =>
             {
                
@@ -150,8 +176,11 @@ namespace CEMSync.Service.EVEMaps
                         oldmodel.description = groupinfo_cn.Result.Description;
                         oldmodel.description_en = groupinfo_en.Result.Description;
                         oldmodel.groupID = groupinfo_en.Result.Group_id;
-                      
 
+                        // foreach (var dogma in groupinfo_cn.Result.Dogma_attributes)
+                        // {
+                        //     var oldmodel=oldtypeattr
+                        // }
                        
                     }
                     catch (Exception e)
@@ -168,6 +197,9 @@ namespace CEMSync.Service.EVEMaps
             await db.SaveChangesAsync();
             _logger.LogInformation("完成!");
         }
+
+
+
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {

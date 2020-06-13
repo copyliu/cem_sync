@@ -69,6 +69,8 @@ namespace EVEMarketSite.Model
         public virtual DbSet<regions> regions { get; set; }
         public virtual DbSet<stations> stations { get; set; }
         public virtual DbSet<systems> systems { get; set; }
+        public virtual DbSet<dogma_attributes> dogma_attributes { get; set; }
+        public virtual DbSet<type_attributes> type_attributes { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -83,7 +85,7 @@ namespace EVEMarketSite.Model
         {
 
             modelBuilder.Entity<current_market>().HasKey(p => new {p.id, p.regionid});
-
+            modelBuilder.Entity<type_attributes>().HasKey(p => new {p.type_id, p.attribute_id});
             OnModelCreatingPartial(modelBuilder);
         }
 

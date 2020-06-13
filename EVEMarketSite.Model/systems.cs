@@ -30,6 +30,9 @@ namespace EVEMarketSite.Model
 
         [InverseProperty("system")]
         public virtual ICollection<current_market> current_market_p001 { get; set; }
-       
+
+
+
+
     }
 }

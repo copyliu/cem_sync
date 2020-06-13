@@ -13,7 +13,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CEMSync.ESI", "CEMSync.ESI\
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "EVEMarketSite.Model", "EVEMarketSite.Model\EVEMarketSite.Model.csproj", "{5C4EB377-942F-4D4E-9A5D-4D0E31D7728C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CEMSync.Model.KillBoard", "CEMSync.Model.KillBoard\CEMSync.Model.KillBoard.csproj", "{55B68E8E-6748-4C00-9EEC-C93168A86B7C}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CEMSync.Model.KillBoard", "CEMSync.Model.KillBoard\CEMSync.Model.KillBoard.csproj", "{55B68E8E-6748-4C00-9EEC-C93168A86B7C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CEMSync.Helpers", "CEMSync.Helpers\CEMSync.Helpers.csproj", "{EC7421BD-E686-4F5E-B01A-4F67B5B176DE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -45,6 +47,10 @@ Global
 		{55B68E8E-6748-4C00-9EEC-C93168A86B7C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{55B68E8E-6748-4C00-9EEC-C93168A86B7C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{55B68E8E-6748-4C00-9EEC-C93168A86B7C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EC7421BD-E686-4F5E-B01A-4F67B5B176DE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EC7421BD-E686-4F5E-B01A-4F67B5B176DE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EC7421BD-E686-4F5E-B01A-4F67B5B176DE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EC7421BD-E686-4F5E-B01A-4F67B5B176DE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

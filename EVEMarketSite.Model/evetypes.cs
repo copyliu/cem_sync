@@ -43,8 +43,8 @@ namespace EVEMarketSite.Model
         [StringLength(9000)]
         public string description_en { get; set; }
      
-        // [InverseProperty(nameof(type_attributes.type_id))]
-        // public virtual ICollection<type_attributes> attributes { get; set; }
+        [InverseProperty(nameof(type_attributes.evetype))]
+        public virtual ICollection<type_attributes> attributes { get; set; }
 
         [InverseProperty("type")]
         public virtual ICollection<current_market> current_market_p001 { get; set; }

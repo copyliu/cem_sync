@@ -40,7 +40,7 @@ namespace EVEMarketSite.Model
         [InverseProperty(nameof(evetypes.current_market_p001))]
         public virtual evetypes type { get; set; }
         [ForeignKey(nameof(stationid))]
-        [InverseProperty(nameof(stations.current_market_p001))]
+        [InverseProperty(nameof(stations.current_markets))]
         public virtual stations station { get; set; }
     }
 }
