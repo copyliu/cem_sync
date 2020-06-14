@@ -131,7 +131,7 @@ namespace CEMSync.Service.EVEMaps
             _service = service;
         }
 
-        async Task<List<stations>> UpdateCitidals(CancellationToken stoppingToken)
+        async Task UpdateCitidals(CancellationToken stoppingToken)
         {
             MarketDB db1 = IsTQ ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
             var citidals = await this.client.GetAllCitidalIds(stoppingToken);
@@ -143,11 +143,11 @@ namespace CEMSync.Service.EVEMaps
             }
             catch (Exception e)
             {
-                return await db1.stations.Where(p => p.stationid > int.MaxValue).AsNoTracking()
-                    .ToListAsync(stoppingToken);
+                _logger.LogInformation(e,$"更新建筑物失败 {IsTQ} "+e );
+              return;
             }
          
-            foreach (var task in tasks)
+            foreach (var task in tasks.Where(p=>p.task.Result!=null))
             {
                 var citidalinfo = task.task.Result;
                 var model = oldstations.FirstOrDefault(p => p.stationid == task.p);
@@ -159,16 +159,15 @@ namespace CEMSync.Service.EVEMaps
 
                 }
 
+                var name = citidalinfo.Name.Split(" - ")[0];
                 model.systemid = citidalinfo.Solar_system_id;
                 model.corpid = citidalinfo.Owner_id;
-                model.stationname = citidalinfo.Name;
+                model.stationname = $"位于 {name} 的玩家建筑物";
 
 
             }
-
+            db1.RemoveRange(db1.stations.Where(p=>p.stationid>int.MaxValue).Where(p=>!citidals.Contains(p.stationid)));
             await db1.SaveChangesAsync(stoppingToken);
-            return await db1.stations.Where(p => p.stationid > int.MaxValue).AsNoTracking()
-                .ToListAsync(stoppingToken);
         }
 
         async Task<List<Get_markets_structures_structure_id_200_ok>> GetStructOrders(long structid,
@@ -277,10 +276,12 @@ namespace CEMSync.Service.EVEMaps
 
         protected async Task Update(CancellationToken stoppingToken)
         {
+            await UpdateCitidals(stoppingToken);
+          
 
-           var stations= (await UpdateCitidals(stoppingToken)).ToDictionary(p=>p.stationid,p=>p.systemid);
-
-            MarketDB db1 = IsTQ ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
+            MarketDB db1 = IsTQ ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>(); 
+            var stations= (   await db1.stations.Where(p => p.stationid > int.MaxValue).AsNoTracking()
+                .ToListAsync(stoppingToken)).ToDictionary(p=>p.stationid,p=>p.systemid);
             var regions = await db1.regions.AsNoTracking().OrderBy(p => p.regionid).ToListAsync();
 
 
@@ -350,7 +351,7 @@ namespace CEMSync.Service.EVEMaps
                     var citidal=order.Select(p => p.Value).Where(p => p.stationid > int.MaxValue).Select(p => p.stationid)
                         .Distinct().ToList();
                     citidal.AddRange(neworder.Where(p=>p.Location_id>int.MaxValue).Select(p=>p.Location_id).Distinct());
-                    citidal = citidal.Distinct().ToList();
+                    citidal = citidal.Distinct().Where(p=>stations.ContainsKey(p)).ToList();
 
                     var citidaltasks=citidal.Select(p => GetStructOrders(p, stoppingToken)).ToList();
                     await Task.WhenAll(citidaltasks);

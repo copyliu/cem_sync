@@ -158,7 +158,15 @@ namespace CEMSync.ESI
             }
             else
             {
-                throw new Exception("Status Code:" + response.StatusCode);
+                if (response.StatusCode == HttpStatusCode.Forbidden)
+                {
+                    return null;
+                }
+                else
+                {
+                    throw new Exception("Status Code:" + response.StatusCode);
+                }
+                
             }
 
 
