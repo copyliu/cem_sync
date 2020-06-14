@@ -225,6 +225,15 @@ namespace CEMSync.ESI
         public async Task<List<Get_markets_structures_structure_id_200_ok>> Get_markets_structure_ordersAsync(long structure,
             int page, CancellationToken token, DateTimeOffset? lastmod)
         {
+            try
+            {
+                await UpdateToken();
+            }
+            catch
+            {
+                return new List<Get_markets_structures_structure_id_200_ok>();
+
+            }
             var url = $"markets/structures/{structure}/?order_type=all&page={page}";
             var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.Authorization = new AuthenticationHeaderValue(this.Token.token_type, this.Token.access_token);
