@@ -162,7 +162,10 @@ namespace CEMSync.Service.EVEMaps
                 var name = citidalinfo.Name.Split(" - ")[0];
                 model.systemid = citidalinfo.Solar_system_id;
                 model.corpid = citidalinfo.Owner_id;
-                model.stationname = $"位于 {name} 的玩家建筑物";
+                // var mod = await db1.evetypes.FirstOrDefaultAsync(p => p.typeID == citidalinfo.Type_id);
+                // var typename = mod?.typeName ?? "玩家建筑物";
+                model.stationname = citidalinfo.Name;
+                model.typeid = citidalinfo.Type_id;
 
 
             }

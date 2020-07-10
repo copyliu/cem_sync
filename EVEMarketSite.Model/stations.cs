@@ -20,7 +20,7 @@ namespace EVEMarketSite.Model
        
         public int systemid { get; set; }
         public long corpid { get; set; }
-
+        public int? typeid { get; set; }
 
         [InverseProperty(nameof(current_market.station))]
         public virtual ICollection<current_market> current_markets { get; set; }
