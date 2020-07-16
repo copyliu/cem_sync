@@ -282,9 +282,11 @@ namespace CEMSync.Service.EVEMaps
             await UpdateCitidals(stoppingToken);
           
 
-            MarketDB db1 = IsTQ ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>(); 
-            var stations= (   await db1.stations.Where(p => p.stationid > int.MaxValue).AsNoTracking()
-                .ToListAsync(stoppingToken)).ToDictionary(p=>p.stationid,p=>p.systemid);
+            MarketDB db1 = IsTQ ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
+            var stations = await db1.stations.Where(p => p.stationid > int.MaxValue)
+                .ToDictionaryAsync(p => p.stationid, p => p.systemid);
+            // var stations= (   await db1.stations.Where(p => p.stationid > int.MaxValue).AsNoTracking()
+            //     .ToListAsync(stoppingToken)).ToDictionary(p=>p.stationid,p=>p.systemid);
             var regions = await db1.regions.AsNoTracking().OrderBy(p => p.regionid).ToListAsync();
 
 
@@ -343,13 +345,13 @@ namespace CEMSync.Service.EVEMaps
                    
                     var db = IsTQ ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
                  
-                    var order = await EntityFrameworkQueryableExtensions.ToDictionaryAsync<current_market, long, current_market>(db.current_market.Where(p => p.regionid == region.regionid), p => p.orderid, p => p);
+                    var order = await db.current_market.Where(p => p.regionid == region.regionid).ToDictionaryAsync(p => p.orderid, p => p);
 
 
 
                     
                     _logger.LogInformation("完成下载订单: Region: " + region.regionid +
-                                           $" TQ: {IsTQ}; APIOrder {neworder.Count}");
+                                           $" TQ: {IsTQ}; APIOrder {neworder.Count()}");
 
                     var citidal=order.Select(p => p.Value).Where(p => p.stationid > int.MaxValue).Select(p => p.stationid)
                         .Distinct().ToList();
@@ -359,11 +361,9 @@ namespace CEMSync.Service.EVEMaps
                     var citidaltasks=citidal.Select(p => GetStructOrders(p, stoppingToken)).ToList();
                     await Task.WhenAll(citidaltasks);
 
-
-
-                    foreach (var citidaltask in citidaltasks.SelectMany(p=>p.Result))
-                    {
-                        if (stations.ContainsKey(citidaltask.Location_id))
+                    var citidalorders=citidaltasks.AsParallel().SelectMany(p => p.Result).AsParallel()
+                        .Where(p => stations.ContainsKey(p.Location_id))
+                        .Select(citidaltask =>
                         {
                             var orderinfo = new Get_markets_region_id_orders_200_ok()
                             {
@@ -381,34 +381,42 @@ namespace CEMSync.Service.EVEMaps
 
 
                             };
-                            orderinfo.System_id = (int)stations[citidaltask.Location_id];
+                            orderinfo.System_id = (int) stations[citidaltask.Location_id];
                             orderinfo.Range = citidaltask.Range switch
                             {
                                 Get_markets_structures_structure_id_200_okRange.Region =>
                                 Get_markets_region_id_orders_200_okRange.Region,
                                 Get_markets_structures_structure_id_200_okRange.Solarsystem =>
                                 Get_markets_region_id_orders_200_okRange.Solarsystem,
-                                Get_markets_structures_structure_id_200_okRange.Station=>
+                                Get_markets_structures_structure_id_200_okRange.Station =>
                                 Get_markets_region_id_orders_200_okRange.Station,
-                                Get_markets_structures_structure_id_200_okRange._1 => Get_markets_region_id_orders_200_okRange._1,
-                                Get_markets_structures_structure_id_200_okRange._2 => Get_markets_region_id_orders_200_okRange._2,
-                                Get_markets_structures_structure_id_200_okRange._3 => Get_markets_region_id_orders_200_okRange._3,
-                                Get_markets_structures_structure_id_200_okRange._4 => Get_markets_region_id_orders_200_okRange._4,
-                                Get_markets_structures_structure_id_200_okRange._5 => Get_markets_region_id_orders_200_okRange._5,
-                                Get_markets_structures_structure_id_200_okRange._10 => Get_markets_region_id_orders_200_okRange._10,
-                                Get_markets_structures_structure_id_200_okRange._20 => Get_markets_region_id_orders_200_okRange._20,
-                                Get_markets_structures_structure_id_200_okRange._30 => Get_markets_region_id_orders_200_okRange._30,
-                                Get_markets_structures_structure_id_200_okRange._40 => Get_markets_region_id_orders_200_okRange._40,
-                                _=>orderinfo.Range
+                                Get_markets_structures_structure_id_200_okRange._1 =>
+                                Get_markets_region_id_orders_200_okRange._1,
+                                Get_markets_structures_structure_id_200_okRange._2 =>
+                                Get_markets_region_id_orders_200_okRange._2,
+                                Get_markets_structures_structure_id_200_okRange._3 =>
+                                Get_markets_region_id_orders_200_okRange._3,
+                                Get_markets_structures_structure_id_200_okRange._4 =>
+                                Get_markets_region_id_orders_200_okRange._4,
+                                Get_markets_structures_structure_id_200_okRange._5 =>
+                                Get_markets_region_id_orders_200_okRange._5,
+                                Get_markets_structures_structure_id_200_okRange._10 =>
+                                Get_markets_region_id_orders_200_okRange._10,
+                                Get_markets_structures_structure_id_200_okRange._20 =>
+                                Get_markets_region_id_orders_200_okRange._20,
+                                Get_markets_structures_structure_id_200_okRange._30 =>
+                                Get_markets_region_id_orders_200_okRange._30,
+                                Get_markets_structures_structure_id_200_okRange._40 =>
+                                Get_markets_region_id_orders_200_okRange._40,
+                                _ => orderinfo.Range
 
                             };
-                            neworder.Add(orderinfo);
-                        }
-                        
-                       
-                    }
-                 
-                    var allorders= neworder.GroupBy(p => p.Order_id).Select(p => p.First()).ToList();
+                            return orderinfo;
+                        });
+
+                    neworder.AddRange(citidalorders);
+                  
+                    var allorders= neworder.AsParallel().GroupBy(p => p.Order_id).Select(p => p.First()).ToList();
 
                     _logger.LogInformation("完成下载玩家建筑物订单: Region: " + region.regionid +
                                            $" TQ: {IsTQ}; ");
@@ -422,12 +430,9 @@ namespace CEMSync.Service.EVEMaps
 
                     ConcurrentBag<current_market> insertorder = new ConcurrentBag<current_market>();
 
-                    // Parallel.ForEach(allorders, p =>
-                    foreach (var p in allorders)
-
+                    allorders.AsParallel().ForAll(p =>
                     {
-                        current_market market;
-                        var hasold = orders.TryGetValue(p.Order_id, out market);
+                        var hasold = orders.TryGetValue(p.Order_id, out var market);
                         if (!hasold)
                         {
                             market = new current_market();
@@ -447,30 +452,41 @@ namespace CEMSync.Service.EVEMaps
                         market.range = p.Range.ConvertRange();
                         market.systemid = p.System_id;
                         market.regionid = region.regionid;
-                        if (hasold &&
-                            db.Entry(market).State == EntityState.Modified)
+                        lock (db)
                         {
-                            market.reportedtime = Instant.FromDateTimeOffset(DateTimeOffset.Now);
+                            if (hasold &&
+                                db.Entry(market).State == EntityState.Modified)
+                            {
+                                market.reportedtime = Instant.FromDateTimeOffset(DateTimeOffset.Now);
+                            }
+                            else if (!hasold)
+                            {
+                                market.reportedtime = Instant.FromDateTimeOffset(DateTimeOffset.Now);
+                            }
                         }
-                        else if (!hasold)
-                        {
-                            market.reportedtime = Instant.FromDateTimeOffset(DateTimeOffset.Now);
-                        }
-                    }
+                    
 
-                    var todayhistsory = await EntityFrameworkQueryableExtensions.ToDictionaryAsync<market_markethistorybyday, int, market_markethistorybyday>(db.market_markethistorybyday.Where(p =>
+                    });
+
+
+                    // Parallel.ForEach(allorders, p =>
+                    // foreach (var p in allorders)
+
+                    
+
+                    var todayhistsory = await db.market_markethistorybyday.Where(p =>
                         p.regionid == region.regionid && alltypes.Contains(p.typeid) &&
-                        p.date == dttoday.Date), p => p.typeid, p => p);
+                        p.date == dttoday.Date).ToDictionaryAsync(p => p.typeid, p => p);
 
 
                     var realtimehistory =
 
                             !IsTQ
-                                ? await EntityFrameworkQueryableExtensions.ToDictionaryAsync<market_realtimehistory, int, market_realtimehistory>(db.evetypes.Where(p => alltypes.Contains(p.typeID)).Select(ip => ip
-                                            .market_realtimehistory.Where(p =>
-                                                p.regionid == region.regionid && p.date >= dttoday.ToInstant() &&
-                                                p.date < dtnext.ToInstant()).OrderByDescending(o => o.date).First())
-                                        .Where(p => p != null), p => p.typeid, p => p)
+                                ? await db.evetypes.Where(p => alltypes.Contains(p.typeID)).Select(ip => ip
+                                        .market_realtimehistory.Where(p =>
+                                            p.regionid == region.regionid && p.date >= dttoday.ToInstant() &&
+                                            p.date < dtnext.ToInstant()).OrderByDescending(o => o.date).First())
+                                    .Where(p => p != null).ToDictionaryAsync(p => p.typeid, p => p)
 
                                 : null
                         ;
