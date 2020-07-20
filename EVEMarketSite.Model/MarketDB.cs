@@ -50,7 +50,10 @@ namespace EVEMarketSite.Model
             : base(options)
         {
         }
-
+        public virtual DbSet<contracts_info> contracts_info { get; set; }
+        public virtual DbSet<contracts_itemattr> contracts_itemattr { get; set; }
+        public virtual DbSet<contracts_itemdata> contracts_itemdata { get; set; }
+        public virtual DbSet<contracts_items> contracts_items { get; set; }
         public virtual DbSet<constellations> constellations { get; set; }
         public virtual DbSet<crest_order> crest_order { get; set; }
 
@@ -83,6 +86,28 @@ namespace EVEMarketSite.Model
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+
+            modelBuilder.Entity<contracts_info>(entity =>
+            {
+                entity.Property(e => e.ID).ValueGeneratedNever();
+            });
+
+            modelBuilder.Entity<contracts_itemattr>(entity =>
+            {
+                entity.HasKey(e => new { e.item_id, e.attribute_id });
+            });
+
+            modelBuilder.Entity<contracts_itemdata>(entity =>
+            {
+                entity.Property(e => e.item_id).ValueGeneratedNever();
+            });
+
+            modelBuilder.Entity<contracts_items>(entity =>
+            {
+                entity.Property(e => e.ID).ValueGeneratedNever();
+
+            });
+
 
             modelBuilder.Entity<current_market>().HasKey(p => new {p.id, p.regionid});
             modelBuilder.Entity<type_attributes>().HasKey(p => new {p.type_id, p.attribute_id});

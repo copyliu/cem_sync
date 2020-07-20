@@ -85,6 +85,29 @@ namespace CEMSync.Service.EVEMaps
 
           
              var newmodels = new ConcurrentBag<EVEMarketSite.Model.marketgroup>();
+             var oldattr = await EntityFrameworkQueryableExtensions.ToListAsync(db.dogma_attributes);
+             foreach (var m in await attr)
+             {
+                 var model = oldattr.FirstOrDefault(p => p.attribute_id == m.Attribute_id);
+                 if (model == null)
+                 {
+                     model = new dogma_attributes();
+                     db.dogma_attributes.Add(model);
+                 }
+
+                 model.attribute_id = m.Attribute_id;
+                 model.name = m.Name;
+                 model.description = m.Description;
+                 model.default_value = m.Default_value;
+                 model.display_name = m.Display_name;
+                 model.high_is_good = m.High_is_good;
+                 model.icon_id = m.Icon_id;
+                 model.published = m.Published;
+                 model.stackable = m.Stackable;
+                 model.unit_id = m.Unit_id;
+             }
+
+
             await Dasync.Collections.ParallelForEachExtensions.ParallelForEachAsync((await allmarketgroupstask).Distinct(),async i =>
             {
                 while (true)
@@ -124,28 +147,7 @@ namespace CEMSync.Service.EVEMaps
             await db.SaveChangesAsync();
             _logger.LogDebug($"Save GetMarketItemGroupInfo OK");
 
-            var oldattr = await EntityFrameworkQueryableExtensions.ToListAsync(db.dogma_attributes);
-            foreach (var m in await attr)
-            {
-                var model = oldattr.FirstOrDefault(p => p.attribute_id == m.Attribute_id);
-                if (model == null)
-                {
-                    model=new dogma_attributes();
-                    db.dogma_attributes.Add(model);
-                }
-
-                model.attribute_id = m.Attribute_id;
-                model.name = m.Name;
-                model.description = m.Description;
-                model.default_value = m.Default_value;
-                model.display_name = m.Display_name;
-                model.high_is_good = m.High_is_good;
-                model.icon_id = m.Icon_id;
-                model.published = m.Published;
-                model.stackable = m.Stackable;
-                model.unit_id = m.Unit_id;
-            }
-
+       
             await db.SaveChangesAsync();
             var oldtypes = await EntityFrameworkQueryableExtensions.ToListAsync(db.evetypes);
             var oldtypeattr = await EntityFrameworkQueryableExtensions.ToListAsync(db.type_attributes);
@@ -176,12 +178,25 @@ namespace CEMSync.Service.EVEMaps
                         oldmodel.description = groupinfo_cn.Result.Description;
                         oldmodel.description_en = groupinfo_en.Result.Description;
                         oldmodel.groupID = groupinfo_en.Result.Group_id;
+                      
+                    oldmodel.attributes.Clear();
+                    if (groupinfo_cn.Result.Dogma_attributes?.Count > 0)
+                    {
+                        foreach (var resultDogmaAttribute in groupinfo_cn.Result.Dogma_attributes)
+                        {
+                            newtypeattrs.Add(new type_attributes()
+                            {
+                                attribute_id = resultDogmaAttribute.Attribute_id,
+                                value = resultDogmaAttribute.Value,
+                                type_id = i
+                            });
+                        }
+                    }
 
-                        // foreach (var dogma in groupinfo_cn.Result.Dogma_attributes)
-                        // {
-                        //     var oldmodel=oldtypeattr
-                        // }
-                       
+                  
+
+
+
                     }
                     catch (Exception e)
                     {
@@ -193,7 +208,11 @@ namespace CEMSync.Service.EVEMaps
                
 
             }, MAX_THREAD);
+           
             db.evetypes.AddRange(newtypes);
+            await db.SaveChangesAsync();
+            db.type_attributes.RemoveRange(db.type_attributes);
+            db.AddRange(newtypeattrs);
             await db.SaveChangesAsync();
             _logger.LogInformation("完成!");
         }
@@ -206,8 +225,7 @@ namespace CEMSync.Service.EVEMaps
             try
             {
 
-                await UpdateSde(true);
-                await UpdateSde(false);
+               await  Task.WhenAll(UpdateSde(false));
 
             }
             catch (Exception e)

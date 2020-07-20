@@ -15,7 +15,7 @@ using Newtonsoft.Json.Linq;
 
 namespace CEMSync.ESI
 {
-    public class ESIClient
+    public partial class ESIClient
     {
         public IOptions<MyConfig> _config { get; }
         SemaphoreSlim lockSemaphoreSlim=new SemaphoreSlim(1,1);
@@ -133,6 +133,51 @@ namespace CEMSync.ESI
            
             _env = env;
         }
+
+
+        public async Task<Get_contracts_public_region_id_200_ok[]> GetRegionContracts(long regionid,CancellationToken token)
+        {
+            var url = $"contracts/public/{regionid}/";
+            var response = await this.http.GetAsync(url, token);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception("Status Code:" + response.StatusCode);
+            }
+
+            var result = JsonConvert.DeserializeObject<Get_contracts_public_region_id_200_ok[]>(await response.Content.ReadAsStringAsync());
+            return result;
+            
+            
+        }
+
+        public async Task<Get_contracts_public_items_contract_id_200_ok[]> GetContractsItems(int contractid,CancellationToken token)
+        {
+            var url = $"contracts/public/items/{contractid}/";
+            var response = await this.http.GetAsync(url, token);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception("Status Code:" + response.StatusCode);
+            }
+
+            var result = JsonConvert.DeserializeObject<Get_contracts_public_items_contract_id_200_ok[]>(await response.Content.ReadAsStringAsync());
+            return result;
+
+        }
+
+        public async Task<Get_dogma_dynamic_items_type_id_item_id_ok> GetItemDogma(int typeid,long itemid,CancellationToken token)
+        {
+            var url = $"dogma/dynamic/items/{typeid}/{itemid}/";
+            var response = await this.http.GetAsync(url, token);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception("Status Code:" + response.StatusCode);
+            }
+
+            var result = JsonConvert.DeserializeObject<Get_dogma_dynamic_items_type_id_item_id_ok>(await response.Content.ReadAsStringAsync());
+            return result;
+        }
+
+
         public async Task<List<Get_sovereignty_structures_200_ok>> Get_sovereignty_structuresAsync(Datasource serenity, object o)
         {
             throw new System.NotImplementedException();

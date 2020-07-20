@@ -134,7 +134,17 @@ namespace CEMSync.Service.EVEMaps
         async Task UpdateCitidals(CancellationToken stoppingToken)
         {
             MarketDB db1 = IsTQ ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
-            var citidals = await this.client.GetAllCitidalIds(stoppingToken);
+            long[] citidals;
+            try
+            {
+                citidals = await this.client.GetAllCitidalIds(stoppingToken);
+            }
+            catch (Exception e)
+            {
+                _logger.LogInformation(e, $"更新建筑物失败 {IsTQ} " + e);
+                return;
+            }
+          
             var tasks = citidals.Select(p => new {p,task= this.client.GetCitidal(p)}).ToList();
             var oldstations = await EntityFrameworkQueryableExtensions.ToListAsync(db1.stations.Where(p => p.stationid > int.MaxValue));
             try

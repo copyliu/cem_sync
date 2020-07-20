@@ -16,7 +16,7 @@ namespace EVEMarketSite.Model
             market_markethistory = new HashSet<market_markethistory>();
            
             market_realtimehistory = new HashSet<market_realtimehistory>();
-            
+            attributes=new HashSet<type_attributes>();
         }
 
         [DatabaseGenerated(DatabaseGeneratedOption.None)]
