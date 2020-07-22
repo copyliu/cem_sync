@@ -18,7 +18,7 @@ namespace EVEMarketSite.Model
         public int? material_efficiency { get; set; }
         public int? time_efficiency { get; set; }
         public int? runs { get; set; }
-        public long? item_id { get; set; }
+        public long item_id { get; set; }
 
         [ForeignKey(nameof(contract_id))]
         [InverseProperty(nameof(contracts_info.contracts_items))]

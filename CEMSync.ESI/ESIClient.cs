@@ -396,5 +396,23 @@ namespace CEMSync.ESI
             return JsonConvert.DeserializeObject<Get_universe_types_type_id_ok>(
                 await response.Content.ReadAsStringAsync());
         }
+
+        public async Task<decimal?> GetMaxPrice(int argContractId,CancellationToken token)
+        {
+            var url = $"contracts/public/bids/{argContractId}";
+            var response = await this.http.GetAsync(url, HttpCompletionOption.ResponseContentRead);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception("Status Code:" + response.StatusCode);
+            }
+            var r= JsonConvert.DeserializeObject<Get_contracts_public_bids_contract_id_200_ok[]>(
+                await response.Content.ReadAsStringAsync());
+            if (r.Any())
+            return (decimal)r.Max(p => p.Amount);
+            else
+            {
+                return null;
+            }
+        }
     }
 }

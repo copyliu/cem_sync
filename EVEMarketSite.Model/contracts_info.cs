@@ -26,7 +26,7 @@ namespace EVEMarketSite.Model
         public int? issuer_id { get; set; }
         [StringLength(255)]
         public string type { get; set; }
-        public int? region_id { get; set; }
+        public long region_id { get; set; }
         [Required]
         [StringLength(255)]
         public string title { get; set; }
@@ -35,7 +35,8 @@ namespace EVEMarketSite.Model
         public long? start_location_id { get; set; }
         public long? end_location_id { get; set; }
         public bool? for_corporation { get; set; }
-
+        public bool vaild { get; set; }
+        public bool otheritem { get; set; }
         [InverseProperty("contract_")]
         public virtual ICollection<contracts_items> contracts_items { get; set; }
     }

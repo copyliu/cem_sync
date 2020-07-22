@@ -28,7 +28,7 @@ namespace CEMSync.Service
 {
     class Program
     {
-        static async Task Main(bool bootstrap = false, bool cnmarket = false, bool tqmarket = false)
+        static async Task Main(bool bootstrap = false, bool cnmarket = false, bool tqmarket = false,bool cncontract=false)
         {
             var builder = new HostBuilder()
                 .ConfigureAppConfiguration((hostingContext, config) =>
@@ -156,6 +156,10 @@ namespace CEMSync.Service
                     {
                         services.AddHostedService<SdeUpdater>();
 
+                    }
+                    else if (cncontract)
+                    {
+                        services.AddHostedService<ContractUpdater>();
                     }
                     else if (cnmarket)
                     {
