@@ -5,6 +5,26 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace EVEMarketSite.Model
 {
+    [Table("invMetaTypes")]
+    public class invMetaTypes
+    {
+        [DatabaseGenerated(DatabaseGeneratedOption.None)]
+        [Key]
+        public int typeID { get; set; }
+        public int? parentTypeID { get; set; }
+        public int? metaGroupID { get; set; }
+
+        [ForeignKey(nameof(typeID))]
+        [InverseProperty(nameof(evetypes.invmetatype))]
+        public virtual evetypes type { get; set; }
+
+        [ForeignKey(nameof(parentTypeID))]
+        [InverseProperty(nameof(evetypes.invmetatype_parent))]
+        public virtual evetypes parenttype { get; set; }
+    }
+
+
+
     [Table("evetypes")]
     public partial class evetypes
     {
@@ -57,6 +77,11 @@ namespace EVEMarketSite.Model
 
         [InverseProperty("type")]
         public virtual ICollection<market_realtimehistory> market_realtimehistory { get; set; }
-       
+
+        [InverseProperty(nameof(invMetaTypes.type))]
+        public virtual ICollection<invMetaTypes> invmetatype { get; set; }
+        [InverseProperty(nameof(invMetaTypes.parenttype))]
+        public virtual ICollection<invMetaTypes> invmetatype_parent { get; set; }
+
     }
 }

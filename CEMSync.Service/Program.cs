@@ -45,19 +45,19 @@ namespace CEMSync.Service
 
                     services.Configure<MyConfig>(hostContext.Configuration);
 
-                    services.AddDbContext<EVEMapDB>(options =>
+                    services.AddDbContextPool<EVEMapDB>(options =>
                         options.UseNpgsql(hostContext.Configuration.GetConnectionString("EVEMapsDB")));
 
-                    services.AddDbContext<CNMarketDB>(options =>
+                    services.AddDbContextPool<CNMarketDB>(options =>
                         options.UseNpgsql(hostContext.Configuration.GetConnectionString("MarketDB"),
                             builder => builder.UseNodaTime()));
-                    services.AddDbContext<TQMarketDB>(options =>
+                    services.AddDbContextPool<TQMarketDB>(options =>
                         options.UseNpgsql(hostContext.Configuration.GetConnectionString("MarketDB_TQ"),
                             builder => builder.UseNodaTime()));
-                    services.AddDbContext<CNKillboardDB>(options =>
+                    services.AddDbContextPool<CNKillboardDB>(options =>
                         options.UseNpgsql(hostContext.Configuration.GetConnectionString("CNKillboardDB"),
                             builder => builder.UseNodaTime()));
-                    services.AddDbContext<TQKillboardDB>(options =>
+                    services.AddDbContextPool<TQKillboardDB>(options =>
                         options.UseNpgsql(hostContext.Configuration.GetConnectionString("TQKillboardDB"),
                             builder => builder.UseNodaTime()));
                     var timeoutPolicy = Policy.TimeoutAsync<HttpResponseMessage>(30);
@@ -173,6 +173,7 @@ namespace CEMSync.Service
                     }
                     else
                     {
+                        services.AddHostedService<ContractUpdater>();
                         services.AddHostedService<CNMarketUpdater>();
                         services.AddHostedService<TQMarketUpdater>();
                         services.AddHostedService<TQKMLoader>();

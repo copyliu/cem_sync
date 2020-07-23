@@ -133,7 +133,7 @@ namespace CEMSync.Service.EVEMaps
 
         async Task UpdateCitidals(CancellationToken stoppingToken)
         {
-            MarketDB db1 = IsTQ ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
+            MarketDB db1 = IsTQ ? (MarketDB)ActivatorUtilities.CreateInstance<TQMarketDB>(_service) : ActivatorUtilities.CreateInstance<CNMarketDB>(_service);
             long[] citidals;
             try
             {
@@ -290,9 +290,9 @@ namespace CEMSync.Service.EVEMaps
         protected async Task Update(CancellationToken stoppingToken)
         {
             await UpdateCitidals(stoppingToken);
-          
 
-            MarketDB db1 = IsTQ ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
+
+            MarketDB db1 = IsTQ ? (MarketDB)ActivatorUtilities.CreateInstance<TQMarketDB>(_service) : ActivatorUtilities.CreateInstance<CNMarketDB>(_service);
             var stations = await db1.stations.Where(p => p.stationid > int.MaxValue)
                 .ToDictionaryAsync(p => p.stationid, p => p.systemid);
             // var stations= (   await db1.stations.Where(p => p.stationid > int.MaxValue).AsNoTracking()
@@ -350,11 +350,11 @@ namespace CEMSync.Service.EVEMaps
                         _logger.LogInformation("下载订单失败: Region: " + region.regionid + $" TQ: {IsTQ}  " + e.Message);
                         continue;
                     }
-                
-                   
-                   
-                    var db = IsTQ ? (MarketDB)_service.GetService<TQMarketDB>() : _service.GetService<CNMarketDB>();
-                 
+
+
+
+                    MarketDB db = IsTQ ? (MarketDB)ActivatorUtilities.CreateInstance<TQMarketDB>(_service) : ActivatorUtilities.CreateInstance<CNMarketDB>(_service);
+
                     var order = await db.current_market.Where(p => p.regionid == region.regionid).ToDictionaryAsync(p => p.orderid, p => p);
 
 

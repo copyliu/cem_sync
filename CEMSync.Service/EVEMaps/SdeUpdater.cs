@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
@@ -8,6 +9,7 @@ using System.Threading.Tasks;
 using CEMSync.ESI;
 using CEMSync.Model.KillBoard;
 using EVEMarketSite.Model;
+using ICSharpCode.SharpZipLib.BZip2;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -73,7 +75,9 @@ namespace CEMSync.Service.EVEMaps
 
         public async Task UpdateSde(bool tq=false)
         {
+
             MarketDB db = tq ? (MarketDB) _tqdb : _cndb;
+
             ESIClient esi = tq ? (ESIClient) _tqesi : _esi;
             var oldgroups = await EntityFrameworkQueryableExtensions.ToListAsync(db.marketgroup);
 
@@ -214,6 +218,46 @@ namespace CEMSync.Service.EVEMaps
             db.type_attributes.RemoveRange(db.type_attributes);
             db.AddRange(newtypeattrs);
             await db.SaveChangesAsync();
+
+            var http = _httpClientFactory.CreateClient("CN");
+            db.InvMetaTypes.RemoveRange(db.InvMetaTypes);
+
+            await using var bz2file1 = await http.GetStreamAsync("https://www.fuzzwork.co.uk/dump/latest/invMetaTypes.csv.bz2");
+            await using var fs = new MemoryStream();
+            BZip2.Decompress(bz2file1,fs,false);
+            fs.Seek(0, SeekOrigin.Begin);
+            using var textreader = new StreamReader(fs);
+            await textreader.ReadLineAsync(); //ignore 1st
+            var r=await textreader.ReadLineAsync(); 
+            while (r!=null)
+            {
+                var imp = r.Split(new[] {','}, StringSplitOptions.RemoveEmptyEntries);
+                var newmodel=new invMetaTypes();
+                newmodel.typeID = int.Parse(imp[0]);
+                if (imp[1] == "None")
+                {
+                    newmodel.parentTypeID = null;
+                }
+                else
+                {
+                    newmodel.parentTypeID = int.Parse(imp[1]);
+                }
+                if (imp[2] == "None")
+                {
+                    newmodel.metaGroupID = null;
+                }
+                else
+                {
+                    newmodel.metaGroupID = int.Parse(imp[2]);
+                }
+                db.InvMetaTypes.Add(newmodel);
+
+                r = await textreader.ReadLineAsync(); //ignore 1st
+            }
+
+            await db.SaveChangesAsync();
+            
+
             _logger.LogInformation("完成!");
         }
 
@@ -225,7 +269,7 @@ namespace CEMSync.Service.EVEMaps
             try
             {
 
-               await  Task.WhenAll(UpdateSde(false));
+                await Task.WhenAll(UpdateSde(false),UpdateSde(true));
 
             }
             catch (Exception e)

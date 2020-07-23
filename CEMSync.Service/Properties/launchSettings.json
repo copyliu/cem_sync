@@ -2,7 +2,7 @@
   "profiles": {
     "CEMSync.Service": {
       "commandName": "Project",
-      "commandLineArgs": "--cncontract"
+      "commandLineArgs": "--bootstrap"
     }
   }
 }

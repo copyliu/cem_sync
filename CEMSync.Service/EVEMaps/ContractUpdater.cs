@@ -91,7 +91,7 @@ namespace CEMSync.Service.EVEMaps
 
                 try
                 {
-                    using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(30));
+                    using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
 
                     using CancellationTokenSource linkedCts =
                         CancellationTokenSource.CreateLinkedTokenSource(cts.Token, stoppingToken);

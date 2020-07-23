@@ -74,7 +74,7 @@ namespace EVEMarketSite.Model
         public virtual DbSet<systems> systems { get; set; }
         public virtual DbSet<dogma_attributes> dogma_attributes { get; set; }
         public virtual DbSet<type_attributes> type_attributes { get; set; }
-
+        public virtual DbSet<invMetaTypes> InvMetaTypes { get; set; }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured)
