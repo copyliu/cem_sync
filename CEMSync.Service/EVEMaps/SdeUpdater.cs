@@ -269,7 +269,7 @@ namespace CEMSync.Service.EVEMaps
             try
             {
 
-                await Task.WhenAll(UpdateSde(false),UpdateSde(true));
+                await Task.WhenAll(UpdateSde(false));//,UpdateSde(true));
 
             }
             catch (Exception e)
