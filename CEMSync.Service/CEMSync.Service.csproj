@@ -20,6 +20,7 @@
     <PackageReference Include="Sentry.AspNetCore" Version="2.1.4" />
     <PackageReference Include="SharpZipLib" Version="1.2.0" />
     <PackageReference Include="System.CommandLine.DragonFruit" Version="0.3.0-alpha.20214.1" />
+    <PackageReference Include="YamlDotNet" Version="8.1.2" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\CEMSync.ESI\CEMSync.ESI.csproj" />

@@ -80,7 +80,7 @@ namespace CEMSync.Service
                         .WaitAndRetryAsync(6,
                             (retryAttempt,result,context) =>
                             {
-                                if (result.Result.StatusCode == (HttpStatusCode) 420)
+                                if (result.Result?.StatusCode == (HttpStatusCode) 420)
                                 {
                                     var val = result.Result.Headers.GetValues("x-esi-error-limit-reset").FirstOrDefault();
                                     if (int.TryParse(val, out int sec))
@@ -92,7 +92,7 @@ namespace CEMSync.Service
                                 return TimeSpan.FromSeconds(1.5 * (retryAttempt - 1));
                             }, (result, span, arg3, arg4) =>
                             {
-                                result.Result.Dispose();
+                                result.Result?.Dispose();
                                 return Task.CompletedTask;
                             });
 

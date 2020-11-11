@@ -111,7 +111,13 @@ namespace CEMSync.Service.EVEMaps
                  model.unit_id = m.Unit_id;
              }
 
-
+             List<marketgroup> cnMarketgroups=new List<marketgroup>();
+             List<evetypes> cntypes=new List<evetypes>();
+             if (tq)
+             {
+                 cnMarketgroups = await _cndb.marketgroup.ToListAsync();
+                 cntypes = await _cndb.evetypes.ToListAsync();
+             }
             await Dasync.Collections.ParallelForEachExtensions.ParallelForEachAsync((await allmarketgroupstask).Distinct(),async i =>
             {
                 while (true)
@@ -119,7 +125,27 @@ namespace CEMSync.Service.EVEMaps
                     try
                     {
                         var groupinfo_en = esi.Get_markets_groups_market_group_idAsync("en-us",i);
-                        var groupinfo_cn = esi.Get_markets_groups_market_group_idAsync("zh",i);
+                        Task<Get_markets_groups_market_group_id_ok> groupinfo_cn;
+                        if (!tq)
+                        {
+                            groupinfo_cn = esi.Get_markets_groups_market_group_idAsync("zh",i);
+                        }
+                        else
+                        {
+                            var tmp = cnMarketgroups.FirstOrDefault(p => p.marketGroupID == i);
+                            if (tmp!=null)
+                            {
+                                groupinfo_cn = Task.FromResult(new Get_markets_groups_market_group_id_ok()
+                                {
+                                    Name = tmp.marketGroupName,
+                                    Description = tmp.description,
+                                });
+                            }
+                            else
+                            {
+                                groupinfo_cn = groupinfo_en;
+                            }
+                        }
 
                         await Task.WhenAll(groupinfo_cn, groupinfo_en);
                         _logger.LogDebug($"GetItemMarketGroupInfoV1Async {i}");
@@ -130,7 +156,7 @@ namespace CEMSync.Service.EVEMaps
                             oldmodel.marketGroupID = i;
                             newmodels.Add(oldmodel);
                         }
-
+                        
                         oldmodel.marketGroupName_en = groupinfo_en.Result.Name;
                         oldmodel.marketGroupName = groupinfo_cn.Result.Name;
                         oldmodel.description = groupinfo_cn.Result.Description;
@@ -162,11 +188,29 @@ namespace CEMSync.Service.EVEMaps
                
                     try
                     {
-                        var groupinfo_en =
-                            esi.Get_universe_types_type_idAsync("en-us",
-                                i);
-                        var groupinfo_cn = 
-                            esi.Get_universe_types_type_idAsync("zh", i);
+                        var groupinfo_en = esi.Get_universe_types_type_idAsync("en-us", i);
+                        Task<Get_universe_types_type_id_ok> groupinfo_cn;
+                        if (!tq)
+                        {
+                            groupinfo_cn = esi.Get_universe_types_type_idAsync("zh", i);
+                        }
+                        else
+                        {
+                            var tmp = cntypes.FirstOrDefault(p => p.typeID == i);
+                            if (tmp != null)
+                            {
+                                groupinfo_cn = Task.FromResult(new Get_universe_types_type_id_ok()
+                                {
+                                    Name = tmp.typeName,
+                                    Description = tmp.description,
+                                });
+                            }
+                            else
+                            {
+                                groupinfo_cn = groupinfo_en;
+                            }
+                        }
+
                         await Task.WhenAll(groupinfo_cn, groupinfo_en);
                         _logger.LogDebug($"GetTypeInfoV3Async {i}");
                         var oldmodel = oldtypes.FirstOrDefault(p => p.typeID == i);
@@ -177,7 +221,14 @@ namespace CEMSync.Service.EVEMaps
                             newtypes.Add(oldmodel);
                         }
 
-                        oldmodel.typeName_en = groupinfo_en.Result.Name;
+                        oldmodel.marketGroupID = groupinfo_en.Result.Market_group_id;
+                        oldmodel.portionSize = groupinfo_en.Result.Portion_size;
+                        oldmodel.published = groupinfo_en.Result.Published;
+                        oldmodel.mass = groupinfo_en.Result.Mass;
+                        oldmodel.capacity = groupinfo_en.Result.Capacity;
+                        oldmodel.iconID = groupinfo_en.Result.Icon_id;
+                        oldmodel.volume = groupinfo_en.Result.Volume;
+                       oldmodel.typeName_en = groupinfo_en.Result.Name;
                         oldmodel.typeName = groupinfo_cn.Result.Name;
                         oldmodel.description = groupinfo_cn.Result.Description;
                         oldmodel.description_en = groupinfo_en.Result.Description;
@@ -269,7 +320,9 @@ namespace CEMSync.Service.EVEMaps
             try
             {
 
-                await Task.WhenAll(UpdateSde(false));//,UpdateSde(true));
+                await Task.WhenAll(UpdateSde(false));
+                await Task.WhenAll(UpdateSde(true));
+                //,UpdateSde(true));
 
             }
             catch (Exception e)
