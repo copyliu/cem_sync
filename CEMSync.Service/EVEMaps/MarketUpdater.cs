@@ -355,7 +355,7 @@ namespace CEMSync.Service.EVEMaps
 
                     MarketDB db = IsTQ ? (MarketDB)ActivatorUtilities.CreateInstance<TQMarketDB>(_service) : ActivatorUtilities.CreateInstance<CNMarketDB>(_service);
 
-                    var order = await db.current_market.Where(p => p.regionid == region.regionid).ToDictionaryAsync(p => p.orderid, p => p);
+                    var currentOrders = await db.current_market.Where(p => p.regionid == region.regionid).ToListAsync();
 
 
 
@@ -363,7 +363,7 @@ namespace CEMSync.Service.EVEMaps
                     _logger.LogInformation("完成下载订单: Region: " + region.regionid +
                                            $" TQ: {IsTQ}; APIOrder {neworder.Count()}");
 
-                    var citidal=order.Select(p => p.Value).Where(p => p.stationid > int.MaxValue).Select(p => p.stationid)
+                    var citidal=currentOrders.Where(p => p.stationid > int.MaxValue).Select(p => p.stationid)
                         .Distinct().ToList();
                     citidal.AddRange(neworder.Where(p=>p.Location_id>int.MaxValue).Select(p=>p.Location_id).Distinct());
                     citidal = citidal.Distinct().Where(p=>stations.ContainsKey(p)).ToList();
@@ -435,19 +435,32 @@ namespace CEMSync.Service.EVEMaps
 
                     var alltypes = allorders.Select(p => p.Type_id).Distinct().ToList();
 
-                    ConcurrentDictionary<long, current_market> orders =
-                        new ConcurrentDictionary<long, current_market>(order);
+                    // ConcurrentDictionary<long, current_market> orders =
+                    //     new ConcurrentDictionary<long, current_market>(currentOrders);
 
                     ConcurrentBag<current_market> insertorder = new ConcurrentBag<current_market>();
 
-                    allorders.AsParallel().ForAll(p =>
-                    {
-                        var hasold = orders.TryGetValue(p.Order_id, out var market);
-                        if (!hasold)
+
+                    var oldorders = allorders.AsParallel().GroupJoin(currentOrders.AsParallel(), ok => ok.Order_id,
+                        market => market.orderid, (p, market) => new
                         {
-                            market = new current_market();
-                            market.orderid = p.Order_id;
+                            p, m=market.FirstOrDefault()
+                        });
+                    
+                    oldorders.ForAll(obj =>
+                    {
+                        current_market market;
+                        var p = obj.p;
+                        if (obj.m == null)
+                        {
+                            market = new current_market {orderid = p.Order_id};
+                            market.reportedtime = Instant.FromDateTimeOffset(DateTimeOffset.Now);
                             insertorder.Add(market);
+                        }
+                        else
+                        {
+                            market = obj.m;
+                            
                         }
 
                         market.stationid = p.Location_id;
@@ -462,21 +475,8 @@ namespace CEMSync.Service.EVEMaps
                         market.range = p.Range.ConvertRange();
                         market.systemid = p.System_id;
                         market.regionid = region.regionid;
-                        lock (db)
-                        {
-                            if (hasold &&
-                                db.Entry(market).State == EntityState.Modified)
-                            {
-                                market.reportedtime = Instant.FromDateTimeOffset(DateTimeOffset.Now);
-                            }
-                            else if (!hasold)
-                            {
-                                market.reportedtime = Instant.FromDateTimeOffset(DateTimeOffset.Now);
-                            }
-                        }
-                    
-
                     });
+                  
 
 
                     // Parallel.ForEach(allorders, p =>
@@ -580,7 +580,7 @@ namespace CEMSync.Service.EVEMaps
                     }
 
                     var allids = allorders.AsParallel().Select(o => o.Order_id).Distinct().ToList();
-                    var delteids = orders.Select(p => p.Key).Where(p => !allids.Contains(p));
+                    var delteids = currentOrders.Select(p=>p.orderid).Where(p => !allids.Contains(p));
 
                     _logger.LogInformation("开始保存订单: Region: " + region.regionid + $" TQ: {IsTQ}");
 
