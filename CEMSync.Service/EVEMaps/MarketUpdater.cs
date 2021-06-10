@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -8,6 +9,7 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using CEMSync.ESI;
+using CEMSync.Helpers;
 using EVEMarketSite.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -133,7 +135,11 @@ namespace CEMSync.Service.EVEMaps
 
         async Task UpdateCitidals(CancellationToken stoppingToken)
         {
-            MarketDB db1 = IsTQ ? (MarketDB)ActivatorUtilities.CreateInstance<TQMarketDB>(_service) : ActivatorUtilities.CreateInstance<CNMarketDB>(_service);
+
+            using var sp = _service.CreateScope();
+            await using MarketDB db1 = IsTQ ? sp.ServiceProvider.GetService<TQMarketDB>() : sp.ServiceProvider.GetService<CNMarketDB>();
+            
+        
             long[] citidals;
             try
             {
@@ -146,7 +152,7 @@ namespace CEMSync.Service.EVEMaps
             }
           
             var tasks = citidals.Select(p => new {p,task= this.client.GetCitidal(p)}).ToList();
-            var oldstations = await EntityFrameworkQueryableExtensions.ToListAsync(db1.stations.Where(p => p.stationid > int.MaxValue));
+            var oldstations = await db1.stations.Where(p => p.stationid > int.MaxValue).ToListAsync();
             try
             {
                 await Task.WhenAll(tasks.Select(p => p.task));
@@ -245,10 +251,7 @@ namespace CEMSync.Service.EVEMaps
             }
 
 
-           
-           
-            // ConcurrentBag<List<Get_markets_region_id_orders_200_ok>> res=new ConcurrentBag<List<Get_markets_region_id_orders_200_ok>>();
-
+            
 
 
             var tasks=Enumerable.Range(1, pages).ToList().Select(p =>
@@ -259,364 +262,290 @@ namespace CEMSync.Service.EVEMaps
            
            await Task.WhenAll(tasks);
            return tasks.SelectMany(p=>p.Result).Where(p => p.Volume_remain > 0).ToList();
-
-            //
-            //
-            // await   Dasync.Collections.ParallelForEachExtensions.ParallelForEachAsync(Enumerable.Range(1, pages), async pagenum =>
-            //  {
-            //
-            //      try
-            //      {
-            //          _logger.LogInformation("GET Market ESI " + regionid + " TQ:" + IsTQ + " Page " + pagenum);
-            //          var r = await client.Get_markets_region_id_ordersAsync(regionid, pagenum, linkedCts.Token, lastModified).ConfigureAwait(false);
-            //          res.Add(r.ToList());
-            //
-            //      }
-            //      catch (Exception e)
-            //      {
-            //            cts.Cancel();
-            //            throw new Exception("Error " +e.Message);
-            //      }
-            //  },10, cts.Token);
-            //
-
-
-            // var page1 = result.Result.ToList();
-            // page1.AddRange(loadtasks.SelectMany(p=>p.Result));
-            // return res.SelectMany(p => p).Where(p => p.Volume_remain > 0).ToList();
-            // return page1.Where(p=>p.Volume_remain>0).ToList();
+ 
         }
 
         protected async Task Update(CancellationToken stoppingToken)
         {
             await UpdateCitidals(stoppingToken);
 
+            using var sp = _service.CreateScope();
+            await using MarketDB db1 = IsTQ ? sp.ServiceProvider.GetService<TQMarketDB>() : sp.ServiceProvider.GetService<CNMarketDB>();
+ 
+            var regions =  db1.regions.AsNoTracking().OrderBy(p => p.regionid).AsAsyncEnumerable();
+            var stations = await db1.stations.Where(p => p.stationid > int.MaxValue).ToDictionaryAsync(p => p.stationid, p => p.systemid, cancellationToken: stoppingToken);
 
-            MarketDB db1 = IsTQ ? (MarketDB)ActivatorUtilities.CreateInstance<TQMarketDB>(_service) : ActivatorUtilities.CreateInstance<CNMarketDB>(_service);
-            var stations = await db1.stations.Where(p => p.stationid > int.MaxValue)
-                .ToDictionaryAsync(p => p.stationid, p => p.systemid);
-            // var stations= (   await db1.stations.Where(p => p.stationid > int.MaxValue).AsNoTracking()
-            //     .ToListAsync(stoppingToken)).ToDictionary(p=>p.stationid,p=>p.systemid);
-            var regions = await db1.regions.AsNoTracking().OrderBy(p => p.regionid).ToListAsync();
-
-
-            var downloadTasks = new Dictionary<long, Task<List<Get_markets_region_id_orders_200_ok>>>();
-            
-                long? previd = null;
-                foreach (var region in regions)
-                {
-                    if (!previd.HasValue)
-                    {
-                        downloadTasks[region.regionid] = GetESIOrders((int)region.regionid,  stoppingToken);
-                    }
-                    else
-                    {
-                        downloadTasks[region.regionid] = downloadTasks[previd.Value]
-                            .ContinueWith(t => GetESIOrders((int)region.regionid,  stoppingToken), stoppingToken)
-                            .Unwrap();
-                    }
-
-                    previd = region.regionid;
-
-                }
+            await regions.AsyncParallelForEach(p => UpdateRegion(p, stations, stoppingToken), 3);
             
            
-
-
-            foreach (var region in regions)
-            {
-                try
-                {
-                    if (stoppingToken.IsCancellationRequested)
-                    {
-                        return;
-                    }
-
-                    _logger.LogInformation("开始下载订单: Region: " + region.regionid + $" TQ: {IsTQ}");
-
-
-                    var dttoday = MarketDB.ChinaTimeZone.AtStartOfDay(DateTime.Today.ToLocalDateTime().Date);
-                    var dtnext = dttoday.Plus(Duration.FromDays(1));
-                    List<Get_markets_region_id_orders_200_ok> neworder;
-
-                    try
-                    {
-                       
-                            neworder = await downloadTasks[region.regionid];
-                       
-                    }
-                    catch (Exception e)
-                    {
-                        _logger.LogInformation("下载订单失败: Region: " + region.regionid + $" TQ: {IsTQ}  " + e.Message);
-                        continue;
-                    }
-
-
-
-                    MarketDB db = IsTQ ? (MarketDB)ActivatorUtilities.CreateInstance<TQMarketDB>(_service) : ActivatorUtilities.CreateInstance<CNMarketDB>(_service);
-
-                    var currentOrders = await db.current_market.Where(p => p.regionid == region.regionid).ToListAsync();
-
-
-
-                    
-                    _logger.LogInformation("完成下载订单: Region: " + region.regionid +
-                                           $" TQ: {IsTQ}; APIOrder {neworder.Count()}");
-
-                    var citidal=currentOrders.Where(p => p.stationid > int.MaxValue).Select(p => p.stationid)
-                        .Distinct().ToList();
-                    citidal.AddRange(neworder.Where(p=>p.Location_id>int.MaxValue).Select(p=>p.Location_id).Distinct());
-                    citidal = citidal.Distinct().Where(p=>stations.ContainsKey(p)).ToList();
-
-                    var citidaltasks=citidal.Select(p => GetStructOrders(p, stoppingToken)).ToList();
-                    await Task.WhenAll(citidaltasks);
-
-                    var citidalorders=citidaltasks.AsParallel().SelectMany(p => p.Result).AsParallel()
-                        .Where(p => stations.ContainsKey(p.Location_id))
-                        .Select(citidaltask =>
-                        {
-                            var orderinfo = new Get_markets_region_id_orders_200_ok()
-                            {
-                                Location_id = citidaltask.Location_id,
-                                Duration = citidaltask.Duration,
-                                Is_buy_order = citidaltask.Is_buy_order,
-                                Issued = citidaltask.Issued,
-                                Min_volume = citidaltask.Min_volume,
-                                Order_id = citidaltask.Order_id,
-                                Price = citidaltask.Price,
-                                Type_id = citidaltask.Type_id,
-                                Volume_remain = citidaltask.Volume_remain,
-                                Volume_total = citidaltask.Volume_total
-
-
-
-                            };
-                            orderinfo.System_id = (int) stations[citidaltask.Location_id];
-                            orderinfo.Range = citidaltask.Range switch
-                            {
-                                Get_markets_structures_structure_id_200_okRange.Region =>
-                                Get_markets_region_id_orders_200_okRange.Region,
-                                Get_markets_structures_structure_id_200_okRange.Solarsystem =>
-                                Get_markets_region_id_orders_200_okRange.Solarsystem,
-                                Get_markets_structures_structure_id_200_okRange.Station =>
-                                Get_markets_region_id_orders_200_okRange.Station,
-                                Get_markets_structures_structure_id_200_okRange._1 =>
-                                Get_markets_region_id_orders_200_okRange._1,
-                                Get_markets_structures_structure_id_200_okRange._2 =>
-                                Get_markets_region_id_orders_200_okRange._2,
-                                Get_markets_structures_structure_id_200_okRange._3 =>
-                                Get_markets_region_id_orders_200_okRange._3,
-                                Get_markets_structures_structure_id_200_okRange._4 =>
-                                Get_markets_region_id_orders_200_okRange._4,
-                                Get_markets_structures_structure_id_200_okRange._5 =>
-                                Get_markets_region_id_orders_200_okRange._5,
-                                Get_markets_structures_structure_id_200_okRange._10 =>
-                                Get_markets_region_id_orders_200_okRange._10,
-                                Get_markets_structures_structure_id_200_okRange._20 =>
-                                Get_markets_region_id_orders_200_okRange._20,
-                                Get_markets_structures_structure_id_200_okRange._30 =>
-                                Get_markets_region_id_orders_200_okRange._30,
-                                Get_markets_structures_structure_id_200_okRange._40 =>
-                                Get_markets_region_id_orders_200_okRange._40,
-                                _ => orderinfo.Range
-
-                            };
-                            return orderinfo;
-                        });
-
-                    neworder.AddRange(citidalorders);
-                  
-                    var allorders= neworder.AsParallel().GroupBy(p => p.Order_id).Select(p => p.First()).ToList();
-
-                    _logger.LogInformation("完成下载玩家建筑物订单: Region: " + region.regionid +
-                                           $" TQ: {IsTQ}; ");
-
-
-
-                    var alltypes = allorders.Select(p => p.Type_id).Distinct().ToList();
-
-                    // ConcurrentDictionary<long, current_market> orders =
-                    //     new ConcurrentDictionary<long, current_market>(currentOrders);
-
-                    ConcurrentBag<current_market> insertorder = new ConcurrentBag<current_market>();
-
-
-                    var oldorders = allorders.AsParallel().GroupJoin(currentOrders.AsParallel(), ok => ok.Order_id,
-                        market => market.orderid, (p, market) => new
-                        {
-                            p, m=market.FirstOrDefault()
-                        });
-                    
-                    oldorders.ForAll(obj =>
-                    {
-                        current_market market;
-                        var p = obj.p;
-                        if (obj.m == null)
-                        {
-                            market = new current_market {orderid = p.Order_id};
-                            market.reportedtime = Instant.FromDateTimeOffset(DateTimeOffset.Now);
-                            insertorder.Add(market);
-                        }
-                        else
-                        {
-                            market = obj.m;
-                            
-                        }
-
-                        market.stationid = p.Location_id;
-                        market.typeid = p.Type_id;
-                        market.interval = p.Duration;
-                        market.minvolume = p.Min_volume;
-                        market.volremain = p.Volume_remain;
-                        market.issued = Instant.FromDateTimeOffset(p.Issued);
-                        market.volenter = p.Volume_total;
-                        market.price = p.Price;
-                        market.bid = p.Is_buy_order ? 1 : 0;
-                        market.range = p.Range.ConvertRange();
-                        market.systemid = p.System_id;
-                        market.regionid = region.regionid;
-                    });
-                  
-
-
-                    // Parallel.ForEach(allorders, p =>
-                    // foreach (var p in allorders)
-
-                    
-
-                    var todayhistsory = await db.market_markethistorybyday.Where(p =>
-                        p.regionid == region.regionid && alltypes.Contains(p.typeid) &&
-                        p.date == dttoday.Date).ToDictionaryAsync(p => p.typeid, p => p);
-
-
-                    var realtimehistory =
-
-                            !IsTQ
-                                ? await db.evetypes.Where(p => alltypes.Contains(p.typeID)).Select(ip => ip
-                                        .market_realtimehistory.Where(p =>
-                                            p.regionid == region.regionid && p.date >= dttoday.ToInstant() &&
-                                            p.date < dtnext.ToInstant()).OrderByDescending(o => o.date).First())
-                                    .Where(p => p != null).ToDictionaryAsync(p => p.typeid, p => p)
-
-                                : null
-                        ;
-
-                    foreach (var rt in allorders.AsParallel().GroupBy(p => p.Type_id,
-                        (i, oks) => new {Key = i, Value = oks.ToList().AsParallel()}))
-                    {
-                        var hassellorder = rt.Value.Any(p => p.Is_buy_order == false);
-                        var hasbuyorder = rt.Value.Any(p => p.Is_buy_order == true);
-                        if (hassellorder)
-                        {
-                            market_markethistorybyday hisbydate;
-                            var price = rt.Value.Where(p => !p.Is_buy_order).Min(o => o.Price);
-                            if (!todayhistsory.TryGetValue(rt.Key, out hisbydate))
-                            {
-                                hisbydate = new market_markethistorybyday();
-                                hisbydate.date = LocalDate.FromDateTime(DateTime.Today);
-                                hisbydate.regionid = region.regionid;
-                                hisbydate.typeid = rt.Key;
-                                hisbydate.start = price;
-                                db.market_markethistorybyday.Add(hisbydate);
-                            }
-
-                            hisbydate.end = price;
-                            hisbydate.max = Math.Max(hisbydate.max, price);
-                            if (hisbydate.min > 0)
-                            {
-                                hisbydate.min = Math.Min(hisbydate.min, price);
-                            }
-                            else
-                            {
-                                hisbydate.min = price;
-                            }
-                            
-
-
-
-                        }
-
-                        if (!IsTQ && rt.Value.Any())
-                        {
-                            market_realtimehistory realtime;
-                            realtime = new market_realtimehistory
-                            {
-                                regionid = region.regionid,
-                                typeid = rt.Key,
-                                date = Instant.FromDateTimeOffset(DateTimeOffset.Now),
-                                buy = hasbuyorder
-                                    ? rt.Value.Where(p => p.Is_buy_order).Max(p => p.Price)
-                                    : 0,
-                                sell = hassellorder
-                                    ? rt.Value.Where(p => !p.Is_buy_order).Min(p => p.Price)
-                                    : 0,
-                                buyvol = hasbuyorder
-                                    ? rt.Value.Where(p => p.Is_buy_order).Sum(p => (long) p.Volume_remain)
-                                    : 0,
-                                sellvol = hassellorder
-                                    ? rt.Value.Where(p => !p.Is_buy_order).Sum(p => (long) p.Volume_remain)
-                                    : 0,
-
-                            };
-                            if (realtimehistory.TryGetValue(rt.Key, out var oldrealtime))
-                            {
-                                if (Math.Abs(oldrealtime.buy - realtime.buy) < 0.001 &&
-                                    Math.Abs(oldrealtime.sell - realtime.sell) < 0.001 &&
-                                    Math.Abs(oldrealtime.buyvol - realtime.buyvol) < 1 &&
-                                    Math.Abs(oldrealtime.sellvol - realtime.sellvol) < 1
-                                )
-
-                                    realtime = null;
-                            }
-
-
-                            if (realtime != null)
-                            {
-                                db.market_realtimehistory.Add(realtime);
-                            }
-
-                        }
-
-                    }
-
-                    var allids = allorders.AsParallel().Select(o => o.Order_id).Distinct().ToList();
-                    var delteids = currentOrders.Select(p=>p.orderid).Where(p => !allids.Contains(p));
-
-                    _logger.LogInformation("开始保存订单: Region: " + region.regionid + $" TQ: {IsTQ}");
-
-                    await using var trans = await db.Database.BeginTransactionAsync();
-
-                    try
-                    {
-                        db.current_market.AddRange(insertorder);
-                        await db.Database.ExecuteSqlInterpolatedAsync(
-                            $"delete from current_market  where orderid = any ({delteids.ToList()}) and regionid = {region.regionid};");
-
-                        await db.SaveChangesAsync();
-                        await trans.CommitAsync();
-                        _logger.LogInformation("完成保存订单: Region: " + region.regionid + $" TQ: {IsTQ}");
-                    }
-                    finally
-                    {
-                        foreach (var entityEntry in db.ChangeTracker.Entries().ToArray())
-                        {
-                            entityEntry.State = EntityState.Detached;
-                        }
-                    }
-
-
-
-                }
-                catch (Exception e)
-                {
-                    _logger.LogError("出现错误" + e);
-                }
-
-            }
-
-
+            // foreach (var region in regions)
+            // {
+            //     await UpdateRegion(region, stations, stoppingToken);
+            //
+            //
+            // }
 
         }
 
+        private async Task UpdateRegion(regions region, Dictionary<long, int> stations,
+            CancellationToken stoppingToken)
+        {
+            try
+            {
+                if (stoppingToken.IsCancellationRequested)
+                {
+                    return ;
+                }
+
+                _logger.LogInformation("开始下载订单: Region: " + region.regionid + $" TQ: {IsTQ}");
+
+
+                var dttoday = MarketDB.ChinaTimeZone.AtStartOfDay(DateTime.Today.ToLocalDateTime().Date);
+                var dtnext = dttoday.Plus(Duration.FromDays(1));
+                List<Get_markets_region_id_orders_200_ok> neworder;
+
+                try
+                {
+                    neworder = await GetESIOrders((int)region.regionid, stoppingToken); 
+                }
+                catch (Exception e)
+                {
+                    _logger.LogInformation("下载订单失败: Region: " + region.regionid + $" TQ: {IsTQ}  " + e.Message);
+                    return ;
+                }
+
+                using var sp = _service.CreateScope();
+                await using MarketDB db = IsTQ ? sp.ServiceProvider.GetService<TQMarketDB>() : sp.ServiceProvider.GetService<CNMarketDB>();
+
+            
+              
+                var currentOrders = await db.current_market.Where(p => p.regionid == region.regionid).ToListAsync(cancellationToken: stoppingToken);
+
+
+                _logger.LogInformation("完成下载订单: Region: " + region.regionid +
+                                       $" TQ: {IsTQ}; APIOrder {neworder.Count()}");
+
+                var citidal = currentOrders.Where(p => p.stationid > int.MaxValue).Select(p => p.stationid)
+                    .Distinct().ToList();
+                citidal.AddRange(neworder.Where(p => p.Location_id > int.MaxValue).Select(p => p.Location_id).Distinct());
+                citidal = citidal.Distinct().Where(stations.ContainsKey).ToList();
+
+                var citidaltasks = citidal.Select(p => GetStructOrders(p, stoppingToken)).ToList();
+                await Task.WhenAll(citidaltasks);
+
+                var citidalorders = citidaltasks.AsParallel().SelectMany(p => p.Result).AsParallel()
+                    .Where(p => stations.ContainsKey(p.Location_id))
+                    .Select(citidaltask =>
+                    {
+                        var orderinfo = new Get_markets_region_id_orders_200_ok()
+                        {
+                            Location_id = citidaltask.Location_id,
+                            Duration = citidaltask.Duration,
+                            Is_buy_order = citidaltask.Is_buy_order,
+                            Issued = citidaltask.Issued,
+                            Min_volume = citidaltask.Min_volume,
+                            Order_id = citidaltask.Order_id,
+                            Price = citidaltask.Price,
+                            Type_id = citidaltask.Type_id,
+                            Volume_remain = citidaltask.Volume_remain,
+                            Volume_total = citidaltask.Volume_total
+                        };
+                        orderinfo.System_id = (int) stations[citidaltask.Location_id];
+                        orderinfo.Range = citidaltask.Range switch
+                        {
+                            Get_markets_structures_structure_id_200_okRange.Region =>
+                                Get_markets_region_id_orders_200_okRange.Region,
+                            Get_markets_structures_structure_id_200_okRange.Solarsystem =>
+                                Get_markets_region_id_orders_200_okRange.Solarsystem,
+                            Get_markets_structures_structure_id_200_okRange.Station =>
+                                Get_markets_region_id_orders_200_okRange.Station,
+                            Get_markets_structures_structure_id_200_okRange._1 =>
+                                Get_markets_region_id_orders_200_okRange._1,
+                            Get_markets_structures_structure_id_200_okRange._2 =>
+                                Get_markets_region_id_orders_200_okRange._2,
+                            Get_markets_structures_structure_id_200_okRange._3 =>
+                                Get_markets_region_id_orders_200_okRange._3,
+                            Get_markets_structures_structure_id_200_okRange._4 =>
+                                Get_markets_region_id_orders_200_okRange._4,
+                            Get_markets_structures_structure_id_200_okRange._5 =>
+                                Get_markets_region_id_orders_200_okRange._5,
+                            Get_markets_structures_structure_id_200_okRange._10 =>
+                                Get_markets_region_id_orders_200_okRange._10,
+                            Get_markets_structures_structure_id_200_okRange._20 =>
+                                Get_markets_region_id_orders_200_okRange._20,
+                            Get_markets_structures_structure_id_200_okRange._30 =>
+                                Get_markets_region_id_orders_200_okRange._30,
+                            Get_markets_structures_structure_id_200_okRange._40 =>
+                                Get_markets_region_id_orders_200_okRange._40,
+                            _ => orderinfo.Range
+                        };
+                        return orderinfo;
+                    });
+
+                neworder.AddRange(citidalorders);
+
+                var allorders = neworder.AsParallel().GroupBy(p => p.Order_id).Select(p => p.First()).ToList();
+
+                _logger.LogInformation("完成下载玩家建筑物订单: Region: " + region.regionid +
+                                       $" TQ: {IsTQ}; ");
+
+
+                var alltypes = allorders.Select(p => p.Type_id).Distinct().ToList();
+
+                // ConcurrentDictionary<long, current_market> orders =
+                //     new ConcurrentDictionary<long, current_market>(currentOrders);
+
+                var insertorder = new ConcurrentBag<current_market>();
+
+
+                var oldorders = allorders.AsParallel().GroupJoin(currentOrders.AsParallel(), ok => ok.Order_id,
+                    market => market.orderid, (p, market) => new
+                    {
+                        p, m = market.FirstOrDefault()
+                    });
+
+                oldorders.ForAll(obj =>
+                {
+                    current_market market;
+                    var p = obj.p;
+                    if (obj.m == null)
+                    {
+                        market = new current_market
+                        {
+                            orderid = p.Order_id, reportedtime = Instant.FromDateTimeOffset(DateTimeOffset.Now)
+                        };
+                        insertorder.Add(market);
+                    }
+                    else
+                    {
+                        market = obj.m;
+                    }
+
+                    market.stationid = p.Location_id;
+                    market.typeid = p.Type_id;
+                    market.interval = p.Duration;
+                    market.minvolume = p.Min_volume;
+                    market.volremain = p.Volume_remain;
+                    market.issued = Instant.FromDateTimeOffset(p.Issued);
+                    market.volenter = p.Volume_total;
+                    market.price = p.Price;
+                    market.bid = p.Is_buy_order ? 1 : 0;
+                    market.range = p.Range.ConvertRange();
+                    market.systemid = p.System_id;
+                    market.regionid = region.regionid;
+                });
+
+
+                // Parallel.ForEach(allorders, p =>
+                // foreach (var p in allorders)
+
+
+                var todayhistsory = await db.market_markethistorybyday.Where(p =>
+                    p.regionid == region.regionid && alltypes.Contains(p.typeid) &&
+                    p.date == dttoday.Date).ToDictionaryAsync(p => p.typeid, p => p, cancellationToken: stoppingToken);
+
+
+                var realtimehistory =
+                        !IsTQ
+                            ? await db.evetypes.Where(p => alltypes.Contains(p.typeID)).Select(ip => ip
+                                    .market_realtimehistory.Where(p =>
+                                        p.regionid == region.regionid && p.date >= dttoday.ToInstant() &&
+                                        p.date < dtnext.ToInstant()).OrderByDescending(o => o.date).First())
+                                .Where(p => p != null).ToDictionaryAsync(p => p.typeid, p => p, cancellationToken: stoppingToken)
+                            : null
+                    ;
+
+                foreach (var rt in allorders.AsParallel().GroupBy(p => p.Type_id,
+                    (i, oks) => new {Key = i, Value = oks.ToList().AsParallel()}))
+                {
+                    var hassellorder = rt.Value.Any(p => p.Is_buy_order == false);
+                    var hasbuyorder = rt.Value.Any(p => p.Is_buy_order == true);
+                    if (hassellorder)
+                    {
+                        var price = rt.Value.Where(p => !p.Is_buy_order).Min(o => o.Price);
+                        if (!todayhistsory.TryGetValue(rt.Key, out var hisbydate))
+                        {
+                            hisbydate = new market_markethistorybyday();
+                            hisbydate.date = LocalDate.FromDateTime(DateTime.Today);
+                            hisbydate.regionid = region.regionid;
+                            hisbydate.typeid = rt.Key;
+                            hisbydate.start = price;
+                            db.market_markethistorybyday.Add(hisbydate);
+                        }
+
+                        hisbydate.end = price;
+                        hisbydate.max = Math.Max(hisbydate.max, price);
+                        hisbydate.min = hisbydate.min > 0 ? Math.Min(hisbydate.min, price) : price;
+                    }
+
+                    if (!IsTQ && rt.Value.Any())
+                    {
+                        market_realtimehistory realtime;
+                        realtime = new market_realtimehistory
+                        {
+                            regionid = region.regionid,
+                            typeid = rt.Key,
+                            date = Instant.FromDateTimeOffset(DateTimeOffset.Now),
+                            buy = hasbuyorder
+                                ? rt.Value.Where(p => p.Is_buy_order).Max(p => p.Price)
+                                : 0,
+                            sell = hassellorder
+                                ? rt.Value.Where(p => !p.Is_buy_order).Min(p => p.Price)
+                                : 0,
+                            buyvol = hasbuyorder
+                                ? rt.Value.Where(p => p.Is_buy_order).Sum(p => (long) p.Volume_remain)
+                                : 0,
+                            sellvol = hassellorder
+                                ? rt.Value.Where(p => !p.Is_buy_order).Sum(p => (long) p.Volume_remain)
+                                : 0,
+                        };
+
+                        if (realtimehistory.TryGetValue(rt.Key, out var oldrealtime))
+                        {
+                            if (Math.Abs(oldrealtime.buy - realtime.buy) < 0.001 &&
+                                Math.Abs(oldrealtime.sell - realtime.sell) < 0.001 &&
+                                Math.Abs(oldrealtime.buyvol - realtime.buyvol) < 1 &&
+                                Math.Abs(oldrealtime.sellvol - realtime.sellvol) < 1
+                            )
+
+                                realtime = null;
+                        }
+
+
+                        if (realtime != null)
+                        {
+                            db.market_realtimehistory.Add(realtime);
+                        }
+                    }
+                }
+
+                var allids = allorders.AsParallel().Select(o => o.Order_id).Distinct().ToList();
+                var delteids = currentOrders.Select(p => p.orderid).Where(p => !allids.Contains(p));
+
+                _logger.LogInformation("开始保存订单: Region: " + region.regionid + $" TQ: {IsTQ}");
+
+                await using var trans = await db.Database.BeginTransactionAsync(CancellationToken.None);
+
+                try
+                {
+                    db.current_market.AddRange(insertorder);
+                    await db.Database.ExecuteSqlInterpolatedAsync(
+                        $"delete from current_market  where orderid = any ({delteids.ToList()}) and regionid = {region.regionid};", CancellationToken.None);
+
+                    await db.SaveChangesAsync(CancellationToken.None);
+                    await trans.CommitAsync(CancellationToken.None);
+                    _logger.LogInformation("完成保存订单: Region: " + region.regionid + $" TQ: {IsTQ}");
+                }
+                finally
+                {
+                  
+                }
+            }
+            catch (Exception e)
+            {
+                _logger.LogError("出现错误" + e);
+            }
+
+        }
     }
 }

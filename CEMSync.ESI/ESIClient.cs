@@ -318,8 +318,9 @@ namespace CEMSync.ESI
             {
                 throw new Exception("Wrong Date Time");
             }
-            return JsonConvert.DeserializeObject<List<Get_markets_region_id_orders_200_ok>>(
-                await response.Content.ReadAsStringAsync());
+            var r= await System.Text.Json.JsonSerializer.DeserializeAsync<List<Get_markets_region_id_orders_200_ok>>(
+                await response.Content.ReadAsStreamAsync(token), cancellationToken: token);
+            return r;
         }
 
         public async Task<List<int>> Get_universe_typesAsync(int page)
